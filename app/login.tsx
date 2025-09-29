@@ -84,8 +84,7 @@ export default function LoginScreen() {
   }
 
   const handleCreateAccount = () => {
-    
-    Alert.alert("Em breve", "Funcionalidade de criar conta será implementada em breve")
+    router.push("/register")
   }
 
   const styles = StyleSheet.create({

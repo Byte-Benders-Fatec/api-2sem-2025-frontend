@@ -48,6 +48,8 @@ function AppContent() {
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }}/> 
         <Stack.Screen name="app-map-view" options={{ title: "Mapa" }} />     
         <Stack.Screen name="Alterar_senha" options={{ title: 'Alterar Senha' }} />
+        <Stack.Screen name="register" options={{ title: 'Cadastrar' }} />
+        
       </Stack>      
       <StatusBar style="auto" />
     </ThemeProvider>

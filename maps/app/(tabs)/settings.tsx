@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
-import { 
-    View, 
-    Text, 
-    StyleSheet, 
-    TouchableOpacity, 
+import {
+    View,
+    Text,
+    StyleSheet,
+    TouchableOpacity,
     ScrollView,
     Switch,
-    Linking // para abrir links externos como política de privacidade
+    Linking, // para abrir links externos como política de privacidade
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/app/_layout'; // importando o hook de tema
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // componente reutilizável para cada linha de opção
 type SettingsRowProps = {
@@ -46,87 +49,136 @@ const SettingsRow: React.FC<SettingsRowProps> = ({ icon, text, onPress, isToggle
 
 export default function SettingsScreen() {
     const router = useRouter();
-    // o useColorScheme já nos dá o tema atual. vamos usá-lo para o switch.
+    // o useTheme já nos dá o tema atual. vamos usá-lo para o switch.
     const { colorScheme, setColorScheme } = useTheme();
 
     // estado para o switch de notificações (exemplo)
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
+    // estado para o loading do logout
+    const [loadingLogout, setLoadingLogout] = useState(false);
+
     const navigateTo = (path: Href) => {
         router.push(path);
     };
 
+    // Função de logout
+    const handleLogout = () => {
+        Alert.alert(
+            "Terminar sessão",
+            "Tem certeza que deseja terminar a sessão?",
+            [
+                { text: "Cancelar", style: "cancel" },
+                {
+                    text: "Sair",
+                    style: "destructive",
+                    onPress: async () => {
+                        setLoadingLogout(true);
+                        try {
+
+                            const keysToRemove = ["token", "user"];
+                            await AsyncStorage.multiRemove(keysToRemove);
+
+                            router.replace("/(auth)/login");
+                        } catch (error) {
+                            console.error("Logout error:", error);
+                            Alert.alert("Erro", "Não foi possível terminar a sessão. Tente novamente.");
+                        } finally {
+                            setLoadingLogout(false);
+                        }
+                    },
+                },
+            ],
+            { cancelable: true }
+        );
+    };
+
+    // cores do tema 
+    const safeBackground = colorScheme === "dark" ? "#0b0b0d" : "#f4f4f8";
+    const titleColor = colorScheme === "dark" ? "#fff" : "#333";
+    const sectionTitleColor = colorScheme === "dark" ? "#bfbfbf" : "#888";
+    const rowBackground = colorScheme === "dark" ? "#121214" : "#fff";
+    const rowTextColor = colorScheme === "dark" ? "#fff" : "#333";
+
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: safeBackground }]}>
             <ScrollView contentContainerStyle={styles.container}>
-                <Text style={styles.title}>Configurações</Text>
+                <Text style={[styles.title, { color: titleColor }]}>Configurações</Text>
 
                 {/* --- Secção: Conta --- */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Conta</Text>
-                    <SettingsRow 
-                        icon="person-circle-outline" 
-                        text="Editar Perfil" 
-                        onPress={() => navigateTo('/(tabs)/profile')} // Navega para a aba de perfil
+                    <Text style={[styles.sectionTitle, { color: sectionTitleColor }]}>Conta</Text>
+                    <SettingsRow
+                        icon="person-circle-outline"
+                        text="Editar Perfil"
+                        onPress={() => navigateTo('/profile')} // Navega para a aba de perfil
                     />
-                    <SettingsRow 
-                        icon="lock-closed-outline" 
-                        text="Alterar Senha" 
+                    <SettingsRow
+                        icon="lock-closed-outline"
+                        text="Alterar Senha"
                         onPress={() => navigateTo('/Alterar_senha')} // Navega para a tela de alterar senha
                     />
                 </View>
 
                 {/* --- Secção: Preferências --- */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Preferências</Text>
-                    <SettingsRow 
-                        icon="contrast-outline" 
+                    <Text style={[styles.sectionTitle, { color: sectionTitleColor }]}>Preferências</Text>
+                    <SettingsRow
+                        icon="contrast-outline"
                         text="Modo Noturno"
                         isToggle={true}
                         toggleValue={colorScheme === 'dark'}
                         onToggleChange={() => setColorScheme(colorScheme === 'dark' ? 'light' : 'dark')}
                     />
-                    <SettingsRow 
-                        icon="notifications-outline" 
+                    <SettingsRow
+                        icon="notifications-outline"
                         text="Notificações"
                         isToggle={true}
                         toggleValue={notificationsEnabled}
                         onToggleChange={setNotificationsEnabled}
                     />
-                    <SettingsRow 
-                        icon="language-outline" 
-                        text="Idioma" 
-                        onPress={() => alert('Lógica para alterar idioma')}
+                    <SettingsRow
+                        icon="language-outline"
+                        text="Idioma"
+                        onPress={() => Alert.alert('Idioma', 'Lógica para alterar idioma')}
                     />
                 </View>
 
                 {/* --- Secção: Sobre --- */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Sobre o App</Text>
-                    <SettingsRow 
-                        icon="shield-checkmark-outline" 
-                        text="Política de Privacidade" 
+                    <Text style={[styles.sectionTitle, { color: sectionTitleColor }]}>Sobre o App</Text>
+                    <SettingsRow
+                        icon="shield-checkmark-outline"
+                        text="Política de Privacidade"
                         onPress={() => Linking.openURL('https://expo.dev')} // Abre um link externo
                     />
-                    <SettingsRow 
-                        icon="document-text-outline" 
-                        text="Termos de Serviço" 
+                    <SettingsRow
+                        icon="document-text-outline"
+                        text="Termos de Serviço"
                         onPress={() => Linking.openURL('https://expo.dev')}
                     />
-                    <SettingsRow 
-                        icon="information-circle-outline" 
-                        text="Versão do App" 
-                        onPress={() => alert('Versão 1.0.0')}
+                    <SettingsRow
+                        icon="information-circle-outline"
+                        text="Versão do App"
+                        onPress={() => Alert.alert('Versão 1.0.0')}
                     />
                 </View>
-                
+
                 {/* --- Secção: Ações --- */}
                 <View style={styles.section}>
-                    <TouchableOpacity style={styles.logoutButton} onPress={() => alert('Lógica de Logout')}>
-                        <Text style={styles.logoutButtonText}>Terminar Sessão</Text>
+                    <TouchableOpacity
+                        style={styles.logoutButton}
+                        onPress={handleLogout}
+                        disabled={loadingLogout}
+                        accessibilityLabel="Terminar sessão"
+                    >
+                        {loadingLogout ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.logoutButtonText}>Terminar Sessão</Text>
+                        )}
                     </TouchableOpacity>
                 </View>
-
             </ScrollView>
         </SafeAreaView>
     );
@@ -135,8 +187,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#f4f4f8', // Cor de fundo para modo claro
-        // No seu useColorScheme hook, você pode definir uma cor de fundo para o modo escuro
+        backgroundColor: '#f4f4f8', // Cor padrão (sobrescrita dinamicamente)
     },
     container: {
         padding: 20,

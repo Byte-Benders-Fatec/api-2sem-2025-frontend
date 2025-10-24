@@ -33,30 +33,35 @@ export default function TabLayout() {
         },
       }}
     >      
-      <Tabs.Screen
-        name="profile"
+
+    <Tabs.Screen
+      name="settings"
+      options={{
+        title: 'Settings',
+        tabBarIcon: ({ color, size }) => (
+          <Ionicons name="settings" size={size} color={color} />
+        ),
+        
+      }}
+    />
+
+    <Tabs.Screen
+      name="index"
+      options={{
+        title: 'Login',
+        tabBarIcon: ({ color, size }) => (
+          <Ionicons name="person" size={size} color={color} />
+        ),
+
+      }}
+    />
+
+    <Tabs.Screen
+        name="app-map-view"
         options={{
-          title: 'Profile',
+          title: 'Map',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({color, size }) => (
-            <Ionicons name="home" size={30} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings" size={size} color={color} />
+            <Ionicons name="map" size={size} color={color} />
           ),
         }}
       />

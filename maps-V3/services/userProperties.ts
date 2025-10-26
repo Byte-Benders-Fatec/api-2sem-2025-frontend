@@ -47,8 +47,7 @@ export interface PropertyWithMongoDetails extends UserProperty {
  */
 export const getMyProperties = () =>
   api<UserProperty[]>('/user-properties', { 
-    service: 'auth', 
-    method: 'GET' 
+    method: 'GET'
   });
 
 /**
@@ -56,7 +55,6 @@ export const getMyProperties = () =>
  */
 export const searchPropertiesByCPF = (cpf: string) =>
   api<SearchByCPFResponse>('/user-properties/search-by-cpf', {
-    service: 'auth',
     method: 'POST',
     body: JSON.stringify({ cpf })
   });
@@ -65,26 +63,23 @@ export const searchPropertiesByCPF = (cpf: string) =>
  * Busca uma propriedade específica por ID
  */
 export const getPropertyById = (id: number) =>
-  api<UserProperty>(`/user-properties/${id}`, { 
-    service: 'auth', 
-    method: 'GET' 
+  api<UserProperty>(`/user-properties/${id}`, {
+    method: 'GET'
   });
 
 /**
  * Busca detalhes completos de uma propriedade no serviço mongo
  */
 export const getPropertyMongoDetails = (id: number) =>
-  api<PropertyWithMongoDetails>(`/user-properties/${id}/mongo-details`, { 
-    service: 'auth', 
-    method: 'GET' 
+  api<PropertyWithMongoDetails>(`/user-properties/${id}/mongo-details`, {
+    method: 'GET'
   });
 
 /**
  * Atualiza uma propriedade
  */
 export const updateProperty = (id: number, data: { display_name?: string; registry_number?: string }) =>
-  api<UserProperty>(`/user-properties/${id}`, { 
-    service: 'auth', 
+  api<UserProperty>(`/user-properties/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data)
   });
@@ -93,8 +88,6 @@ export const updateProperty = (id: number, data: { display_name?: string; regist
  * Remove uma propriedade (soft delete)
  */
 export const deleteProperty = (id: number) =>
-  api<{ message: string }>(`/user-properties/${id}`, { 
-    service: 'auth', 
+  api<{ message: string }>(`/user-properties/${id}`, {
     method: 'DELETE' 
   });
-

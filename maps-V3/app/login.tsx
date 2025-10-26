@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -19,19 +20,22 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 export default function LoginScreen() {
   const router = useRouter();
-
-  // Etapa de login
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-
-  // Etapa de código
   const [step, setStep] = useState<'login' | 'verify'>('login');
   const [code, setCode] = useState('');
-
+  const [loginToken, setLoginToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 1️⃣ Envia email e senha para /auth/login
+  const maskEmail = (value: string) => {
+    const [user, domain] = value.split('@');
+    if (!user || !domain) return value;
+    const vis = user.slice(0, 2);
+    return `${vis}${'*'.repeat(Math.max(1, user.length - 2))}@${domain}`;
+  };
+
+  // Etapa 1: email + senha -> /auth/login
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Erro', 'Preencha e-mail e senha.');
@@ -40,55 +44,60 @@ export default function LoginScreen() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || 'Falha no login.');
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || 'Falha no login.');
 
-      // Sucesso → próxima etapa
+      if (!data?.login_token) throw new Error('Resposta inválida: login_token ausente.');
+
+      setLoginToken(data.login_token);
       setStep('verify');
-      Alert.alert('Código enviado', 'Verifique seu e-mail e insira o código recebido.');
-    } catch (error: any) {
-      Alert.alert('Erro', error.message);
+      Alert.alert('Código enviado', `Enviamos um código para ${maskEmail(email)}.`);
+    } catch (e: any) {
+      Alert.alert('Erro', e?.message || 'Falha no login.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2️⃣ Envia código para /auth/finalize-login
+  // Etapa 2: Authorization: Bearer <login_token> + { email, code }
   const handleFinalizeLogin = async () => {
     if (!code) {
       Alert.alert('Erro', 'Informe o código recebido por e-mail.');
       return;
     }
+    if (!loginToken) {
+      Alert.alert('Sessão inválida', 'Refaça o login.');
+      setStep('login');
+      return;
+    }
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/auth/finalize-login`, {
+      const res = await fetch(`${API_BASE_URL}/auth/finalize-login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${loginToken}`,
+        },
         body: JSON.stringify({ email, code }),
       });
 
-      const data = await response.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || 'Código inválido.');
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Código inválido.');
-      }
+      if (!data?.token) throw new Error('Resposta inválida: token de sessão ausente.');
 
-      // Armazena o token com segurança
       await SecureStore.setItemAsync('access_token', data.token);
-
       Alert.alert('Sucesso', 'Login realizado com sucesso!');
-      router.replace('/(tabs)'); // Redireciona para a tela principal
-    } catch (error: any) {
-      Alert.alert('Erro', error.message);
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      Alert.alert('Erro', e?.message || 'Falha ao finalizar login.');
     } finally {
       setIsLoading(false);
     }
@@ -115,10 +124,9 @@ export default function LoginScreen() {
                 value={email}
                 onChangeText={setEmail}
               />
-
-              <View style={styles.inputContainer}>
+              <View style={styles.inputRow}>
                 <TextInput
-                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  style={[styles.input, styles.inputFlex]}
                   placeholder="Senha"
                   secureTextEntry={!isPasswordVisible}
                   value={password}
@@ -134,35 +142,40 @@ export default function LoginScreen() {
                   />
                 </TouchableOpacity>
               </View>
-
               <TouchableOpacity
-                style={styles.button}
+                style={styles.buttonPrimary}
                 onPress={handleLogin}
                 disabled={isLoading}
               >
-                <Text style={styles.buttonText}>
-                  {isLoading ? 'Enviando...' : 'Continuar'}
-                </Text>
+                {isLoading ? <ActivityIndicator /> : <Text style={styles.btnTextPrimary}>Continuar</Text>}
               </TouchableOpacity>
             </>
           ) : (
             <>
+              <Text style={styles.helper}>
+                Enviamos um código para <Text style={styles.bold}>{maskEmail(email)}</Text>
+              </Text>
               <TextInput
                 style={styles.input}
-                placeholder="Código recebido por e-mail"
-                keyboardType="numeric"
+                placeholder="Código (6 dígitos)"
+                keyboardType="number-pad"
                 value={code}
                 onChangeText={setCode}
+                maxLength={6}
               />
-
               <TouchableOpacity
-                style={styles.button}
+                style={styles.buttonPrimary}
                 onPress={handleFinalizeLogin}
                 disabled={isLoading}
               >
-                <Text style={styles.buttonText}>
-                  {isLoading ? 'Validando...' : 'Finalizar Login'}
-                </Text>
+                {isLoading ? <ActivityIndicator /> : <Text style={styles.btnTextPrimary}>Finalizar Login</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.buttonGhost}
+                onPress={() => setStep('login')}
+                disabled={isLoading}
+              >
+                <Text style={styles.btnTextGhost}>Voltar</Text>
               </TouchableOpacity>
             </>
           )}
@@ -173,55 +186,30 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f4f4f8',
-  },
-  container: {
-    flex: 1,
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 32,
-    color: '#333',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
-    marginBottom: 20,
-  },
+  safeArea: { flex: 1, backgroundColor: '#f4f4f8' },
+  container: { flex: 1 },
+  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  title: { fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 24, color: '#333' },
   input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    marginBottom: 20,
-    color: '#333',
+    borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
+    backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 15,
+    fontSize: 16, marginBottom: 16, color: '#333',
   },
-  button: {
-    backgroundColor: '#007BFF',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
+    backgroundColor: '#fff', paddingHorizontal: 12, marginBottom: 16,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  inputFlex: { flex: 1, marginBottom: 0, paddingHorizontal: 4 },
+  buttonPrimary: {
+    backgroundColor: '#007BFF', paddingVertical: 14, borderRadius: 8, alignItems: 'center',
   },
+  btnTextPrimary: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  buttonGhost: {
+    marginTop: 12, paddingVertical: 12, borderRadius: 8, alignItems: 'center',
+    borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff',
+  },
+  btnTextGhost: { color: '#374151', fontSize: 15, fontWeight: '600' },
+  helper: { textAlign: 'center', color: '#666', marginBottom: 8 },
+  bold: { fontWeight: '700', color: '#333' },
 });

@@ -115,46 +115,65 @@ export default function PropriedadesScreen() {
         }
     };
 
-    // Busca propriedades pelo CPF do usuário (nova arquitetura)
+    // Busca propriedades pelo CPF do usuário
     const handleSearchByCPF = async () => {
-        Alert.alert(
-            'Buscar Propriedades',
-            'Deseja buscar propriedades cadastradas em seu CPF?',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Buscar',
-                    onPress: async () => {
-                        try {
-                            setIsSearching(true);
-                            const response = await searchPropertiesByCPF();
+        try {
+            // Carrega o perfil do usuário para obter o CPF
+            const profile = await loadProfile();
 
-                            if (response.total === 0) {
+            if (!profile?.cpf) {
+                Alert.alert(
+                    'CPF não encontrado',
+                    'Não foi possível encontrar o CPF do usuário. Faça login novamente.'
+                );
+                return;
+            }
+
+            Alert.alert(
+                'Buscar Propriedades',
+                `Deseja buscar propriedades cadastradas no CPF ${profile.cpf}?`,
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Buscar',
+                        onPress: async () => {
+                            try {
+                                setIsSearching(true);
+                                const response = await searchPropertiesByCPF(profile.cpf!);
+
+                                if (response.total === 0) {
+                                    Alert.alert(
+                                        'Nenhuma Propriedade Encontrada',
+                                        'Não foram encontradas propriedades cadastradas em seu CPF.'
+                                    );
+                                } else {
+                                    Alert.alert(
+                                        'Sucesso!',
+                                        `${response.total} propriedade(s) encontrada(s) e salva(s).`
+                                    );
+                                    // Recarrega a lista
+                                    await loadProperties();
+                                }
+                            } catch (error: any) {
+                                console.error('Erro ao buscar por CPF:', error);
                                 Alert.alert(
-                                    'Nenhuma Propriedade Encontrada',
-                                    'Não foram encontradas propriedades cadastradas em seu CPF.'
+                                    'Erro',
+                                    error.message || 'Não foi possível buscar as propriedades.'
                                 );
-                            } else {
-                                Alert.alert(
-                                    'Sucesso!',
-                                    `${response.total} propriedade(s) encontrada(s) e salva(s).`
-                                );
-                                // Recarrega a lista
-                                await loadProperties();
+                            } finally {
+                                setIsSearching(false);
                             }
-                        } catch (error: any) {
-                            console.error('Erro ao buscar por CPF:', error);
-                            Alert.alert(
-                                'Erro',
-                                error.message || 'Não foi possível buscar as propriedades.'
-                            );
-                        } finally {
-                            setIsSearching(false);
-                        }
+                        },
                     },
-                },
-            ]
-        );
+                ]
+            );
+        } catch (error: any) {
+            console.error('Erro ao carregar perfil:', error);
+            Alert.alert(
+                'Erro',
+                'Não foi possível carregar os dados do usuário. Faça login novamente.'
+            );
+        }
     };
 
     // Navega para o mapa com a propriedade selecionada

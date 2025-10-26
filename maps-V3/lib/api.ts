@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 // URL do serviço de autenticação (MySQL)
-const AUTH_SERVICE_URL = process.env.EXPO_PUBLIC_AUTH_SERVICE_URL || 'http://localhost:5000/api/v1';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000/api/v1';
 
 async function getToken() {
   return SecureStore.getItemAsync('access_token');
@@ -18,7 +18,7 @@ export async function api<T>(
     ...(options.headers || {}),
   };
 
-  const res = await fetch(`${AUTH_SERVICE_URL}${path}`, {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers
   });

@@ -146,7 +146,7 @@ export default function ChangePasswordScreen() {
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
-              placeholder="Senha Joniel"
+              placeholder="Senha Atual"
               secureTextEntry={!isCurrentPasswordVisible}
               value={currentPassword}
               onChangeText={setCurrentPassword}

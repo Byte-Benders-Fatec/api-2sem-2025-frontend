@@ -1,23 +1,38 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Alert, StyleSheet, Platform } from 'react-native';
-import MapView, { Polygon } from 'react-native-maps';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Alert, StyleSheet } from 'react-native';
+import MapView, { Polygon, Region } from 'react-native-maps';
+import { fetchImoveisViewport } from '../lib/geoApi';
 
 interface Property {
   _id: string;
   geometry: {
+    // GeoJSON Polygon: [ [ [lon,lat], [lon,lat], ... ] ]
     coordinates: number[][][];
   };
-  properties: {
-    cod_imovel: string;
-    municipio: string;
-    num_area: number;
+  properties?: {
+    cod_imovel?: string;
+    municipio?: string;
+    num_area?: number;
   };
-  center: { lat: number; lng: number };
+  center?: { lat: number; lng: number };
+}
+
+function normalizeFromPaged(payload: any): Property[] {
+  if (!payload) return [];
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+
+  // Cada item já é um Feature com geometry/coordinates em [lon, lat]
+  return items.map((f: any) => ({
+    _id: f._id || f.id || String(Math.random()),
+    geometry: f.geometry,
+    properties: f.properties ?? {},
+    center: f.center ?? undefined,
+  })) as Property[];
 }
 
 const AppMapView = () => {
   const [properties, setProperties] = useState<Property[]>([]);
-  const [region, setRegion] = useState({
+  const [region, setRegion] = useState<Region>({
     latitude: -21.5282835667493,
     longitude: -51.0882115351977,
     latitudeDelta: 0.01,
@@ -25,61 +40,56 @@ const AppMapView = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  const getBackendUrl = () => {
-    return Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+  // Transforma region do MapView em bbox: lonMin,latMin,lonMax,latMax
+  const regionToBbox = (r: Region) => {
+    const minLat = r.latitude - r.latitudeDelta / 2;
+    const maxLat = r.latitude + r.latitudeDelta / 2;
+    const minLon = r.longitude - r.longitudeDelta / 2;
+    const maxLon = r.longitude + r.longitudeDelta / 2;
+    // ordem esperada pela API: lonMin,latMin,lonMax,latMax
+    return `${minLon},${minLat},${maxLon},${maxLat}`;
   };
 
-  const fetchProperties = useCallback(async (lat: number, lng: number) => {
+  const loadViewport = useCallback(async (r: Region) => {
     if (isLoading) return;
-    
     setIsLoading(true);
     try {
-      console.log('Pegando as propriedades do backend:', getBackendUrl());
-      console.log('Centro do mapa atual:', lat, lng);
-      
-      const response = await fetch(
-        `${getBackendUrl()}/api/properties?lat=${lat}&lng=${lng}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`Erro HTTP! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log('Propriedades recebidas:', data.length);
-      
-      setProperties(data);
-    } catch (error) {
-      console.error('Erro de Fetch:', error);
-      Alert.alert(
-        'Erro de conexão',
-      );
+      const bbox = regionToBbox(r);
+      const raw = await fetchImoveisViewport({
+        bbox,
+        limit: 200,
+        mode: 'intersects',
+      });
+    
+      // raw tem { page, pageSize, total, totalPages, items: [...] }
+      const list = normalizeFromPaged(raw);
+      setProperties(list);
+    } catch (err: any) {
+      console.error('loadViewport error:', err);
+      Alert.alert('Erro de conexão', err?.message ?? 'Falha ao buscar imóveis');
+      setProperties([]); // evita quebrar o render
     } finally {
       setIsLoading(false);
     }
   }, [isLoading]);
 
-  useEffect(() => {
-    fetchProperties(region.latitude, region.longitude);
-  }, []);
-
-  const handleRegionChangeComplete = useCallback((newRegion: any) => {
-    console.log('Região alterada para:', newRegion.latitude, newRegion.longitude);
+  // Debounce simples para evitar requisições em excesso
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const handleRegionChangeComplete = useCallback((newRegion: Region) => {
     setRegion(newRegion);
-    
-    fetchProperties(newRegion.latitude, newRegion.longitude);
-  }, [fetchProperties]);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => loadViewport(newRegion), 350);
+  }, [loadViewport]);
+
+  useEffect(() => {
+    loadViewport(region);
+  }, []); // primeira carga
 
   const convertCoordinates = (coordinates: number[][][]) => {
-    return coordinates[0].map(coord => ({
-      latitude: coord[1],
-      longitude: coord[0],
+    // assume Polygon com primeira "ring" no índice 0
+    return coordinates[0].map(([lon, lat]) => ({
+      latitude: lat,
+      longitude: lon,
     }));
   };
 
@@ -91,12 +101,12 @@ const AppMapView = () => {
         onRegionChangeComplete={handleRegionChangeComplete}
         mapType="standard"
       >
-        {properties.map((property, index) => (
+        {Array.isArray(properties) && properties.map((property, index) => (
           <Polygon
-            key={property._id}
+            key={property._id ?? `poly-${index}`}
             coordinates={convertCoordinates(property.geometry.coordinates)}
-            fillColor={`rgba(${100 + index * 50}, 100, 200, 0.3)`}
-            strokeColor={`rgba(${100 + index * 50}, 100, 200, 0.8)`}
+            fillColor={`rgba(${100 + (index % 3) * 50}, 100, 200, 0.3)`}
+            strokeColor={`rgba(${100 + (index % 3) * 50}, 100, 200, 0.8)`}
             strokeWidth={2}
           />
         ))}
@@ -106,12 +116,8 @@ const AppMapView = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  map: { flex: 1 },
 });
 
 export default AppMapView;

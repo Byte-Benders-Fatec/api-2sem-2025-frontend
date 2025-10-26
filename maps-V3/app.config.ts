@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import type { ExpoConfig } from '@expo/config';
+import { api } from './lib/api';
 
 const config: ExpoConfig = {
   name: 'maps-V3',
@@ -7,6 +8,7 @@ const config: ExpoConfig = {
   version: '1.0.0',
   extra: {
     apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL,
+    apiGeoBaseUrl: process.env.EXPO_PUBLIC_GEO_API_BASE_URL,
     googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
   },
   android: {

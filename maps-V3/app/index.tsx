@@ -1,34 +1,72 @@
-// app/index.tsx
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React from 'react';
+import { Image, StyleSheet, Text, TouchableOpacity, View, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import { api } from '@/lib/api'; // seu helper que já injeta o Authorization
+import { saveProfile, MeResponse } from '@/lib/session';
+
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL!;
 
 export default function LandingScreen() {
   const router = useRouter();
+  const [loadingGuest, setLoadingGuest] = React.useState(false);
+
+  async function handleGuestLogin() {
+    try {
+      setLoadingGuest(true);
+
+      // 1️⃣ Faz o login do visitante
+      const res = await fetch(`${API_BASE_URL}/auth/guest-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || 'Falha ao entrar como visitante.');
+      if (!data?.token) throw new Error('Token não retornado pelo servidor.');
+
+      // 2️⃣ Armazena o token
+      await SecureStore.setItemAsync('access_token', data.token);
+
+      // 3️⃣ Busca o perfil completo (para pegar api_key, etc.)
+      const me = await api<MeResponse>('/auth/me', { method: 'GET' });
+      await saveProfile(me);
+
+      // 4️⃣ Vai para a tela principal
+      router.replace('/(tabs)');
+    } catch (err: any) {
+      Alert.alert('Erro', err?.message || 'Falha ao entrar como visitante.');
+    } finally {
+      setLoadingGuest(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Logo em círculo */}
         <View style={styles.logoWrapper}>
           <Image
-            source={require('../assets/images/icon.jpg')} // ajuste o caminho se seu logo estiver em outra pasta
+            source={require('../assets/images/icon.jpg')}
             style={styles.logo}
             resizeMode="cover"
           />
         </View>
 
-        {/* Título / Subtítulo (opcional) */}
         <Text style={styles.title}>Bem-vindo</Text>
         <Text style={styles.subtitle}>Escolha como deseja acessar</Text>
 
-        {/* Botões */}
         <View style={styles.buttons}>
           <TouchableOpacity
             style={[styles.button, styles.buttonPrimary]}
-            onPress={() => router.replace('/(tabs)')}
+            onPress={handleGuestLogin}
+            disabled={loadingGuest}
           >
-            <Text style={styles.buttonText}>Acessar como visitante</Text>
+            {loadingGuest ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Acessar como visitante</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -88,7 +126,6 @@ const styles = StyleSheet.create({
   buttonPrimary: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   buttonOutline: { backgroundColor: '#fff', borderColor: '#2563eb' },
   buttonGhost: { backgroundColor: '#fff', borderColor: '#d1d5db' },
-
   buttonText: { fontSize: 16, fontWeight: '700', color: '#fff' },
   buttonTextOutline: { color: '#2563eb' },
   buttonTextGhost: { color: '#374151' },

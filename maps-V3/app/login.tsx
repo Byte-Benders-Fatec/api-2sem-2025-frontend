@@ -15,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
+import { api } from '@/lib/api';
+import { saveProfile, MeResponse } from '@/lib/session';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -94,6 +96,11 @@ export default function LoginScreen() {
       if (!data?.token) throw new Error('Resposta inválida: token de sessão ausente.');
 
       await SecureStore.setItemAsync('access_token', data.token);
+
+      // 2) Busca o perfil no /me (já com Authorization via lib/api.ts)
+      const me = await api<MeResponse>('/auth/me', { method: 'GET' });
+      await saveProfile(me); // salva perfil e a api_key do segundo backend
+
       Alert.alert('Sucesso', 'Login realizado com sucesso!');
       router.replace('/(tabs)');
     } catch (e: any) {

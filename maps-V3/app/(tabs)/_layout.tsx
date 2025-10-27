@@ -12,6 +12,7 @@ export default function TabLayout() {
   return (
    
     <Tabs
+      initialRouteName="mapa" 
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
@@ -35,7 +36,7 @@ export default function TabLayout() {
     >      
       
       <Tabs.Screen
-        name="index"
+        name="mapa"
         options={{
           title: 'Mapa',
           tabBarIcon: ({color, size }) => (

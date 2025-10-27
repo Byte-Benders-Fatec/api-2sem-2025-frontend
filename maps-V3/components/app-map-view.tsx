@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Alert, StyleSheet } from 'react-native';
-import MapView, { Polygon, Region } from 'react-native-maps';
+import MapView, { Polygon, Region, Marker, Callout } from 'react-native-maps';
 import { fetchImoveisViewport } from '../lib/geoApi';
+import SearchPlaces from './SearchPlaces';
 
 interface Property {
   _id: string;
@@ -20,8 +21,6 @@ interface Property {
 function normalizeFromPaged(payload: any): Property[] {
   if (!payload) return [];
   const items = Array.isArray(payload?.items) ? payload.items : [];
-
-  // Cada item já é um Feature com geometry/coordinates em [lon, lat]
   return items.map((f: any) => ({
     _id: f._id || f.id || String(Math.random()),
     geometry: f.geometry,
@@ -31,6 +30,8 @@ function normalizeFromPaged(payload: any): Property[] {
 }
 
 const AppMapView = () => {
+  const mapRef = useRef<MapView | null>(null);
+
   const [properties, setProperties] = useState<Property[]>([]);
   const [region, setRegion] = useState<Region>({
     latitude: -21.5282835667493,
@@ -40,13 +41,19 @@ const AppMapView = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  // Transforma region do MapView em bbox: lonMin,latMin,lonMax,latMax
+  // estado do PIN selecionado
+  const [selected, setSelected] = useState<{
+    lat: number;
+    lng: number;
+    description?: string;
+  } | null>(null);
+
+  // Converte a region do MapView em bbox: lonMin,latMin,lonMax,latMax
   const regionToBbox = (r: Region) => {
     const minLat = r.latitude - r.latitudeDelta / 2;
     const maxLat = r.latitude + r.latitudeDelta / 2;
     const minLon = r.longitude - r.longitudeDelta / 2;
     const maxLon = r.longitude + r.longitudeDelta / 2;
-    // ordem esperada pela API: lonMin,latMin,lonMax,latMax
     return `${minLon},${minLat},${maxLon},${maxLat}`;
   };
 
@@ -60,20 +67,18 @@ const AppMapView = () => {
         limit: 200,
         mode: 'intersects',
       });
-    
-      // raw tem { page, pageSize, total, totalPages, items: [...] }
       const list = normalizeFromPaged(raw);
       setProperties(list);
     } catch (err: any) {
       console.error('loadViewport error:', err);
       Alert.alert('Erro de conexão', err?.message ?? 'Falha ao buscar imóveis');
-      setProperties([]); // evita quebrar o render
+      setProperties([]);
     } finally {
       setIsLoading(false);
     }
   }, [isLoading]);
 
-  // Debounce simples para evitar requisições em excesso
+  // Debounce para evitar muitas requisições
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const handleRegionChangeComplete = useCallback((newRegion: Region) => {
     setRegion(newRegion);
@@ -82,8 +87,9 @@ const AppMapView = () => {
   }, [loadViewport]);
 
   useEffect(() => {
-    loadViewport(region);
-  }, []); // primeira carga
+    loadViewport(region); // primeira carga
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const convertCoordinates = (coordinates: number[][][]) => {
     // assume Polygon com primeira "ring" no índice 0
@@ -93,12 +99,34 @@ const AppMapView = () => {
     }));
   };
 
+  // Centraliza o mapa em um novo ponto + dispara busca por viewport + posiciona PIN
+  const animateTo = (lat: number, lng: number, description?: string) => {
+    const next: Region = {
+      latitude: lat,
+      longitude: lng,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+    mapRef.current?.animateToRegion(next, 600);
+    setRegion(next);
+    setSelected({ lat, lng, description });
+    loadViewport(next);
+  };
+
+  // Permite soltar um PIN com long press (opcional)
+  const handleLongPress = (e: any) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    animateTo(latitude, longitude, 'Ponto selecionado');
+  };
+
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         style={styles.map}
         region={region}
         onRegionChangeComplete={handleRegionChangeComplete}
+        onLongPress={handleLongPress}
         mapType="standard"
       >
         {Array.isArray(properties) && properties.map((property, index) => (
@@ -110,13 +138,41 @@ const AppMapView = () => {
             strokeWidth={2}
           />
         ))}
+
+        {/* PIN selecionado */}
+        {selected && (
+          <Marker coordinate={{ latitude: selected.lat, longitude: selected.lng }}>
+            <Callout>
+              <View style={{ maxWidth: 260 }}>
+                <View>
+                  {/* título/linha 1 */}
+                </View>
+                <View>
+                  {/* descrição */}
+                </View>
+              </View>
+              {/* para simplificar, texto direto */}
+              {/* Você pode estilizar melhor com Views/Text */}
+            </Callout>
+          </Marker>
+        )}
       </MapView>
+
+      {/* Barra de busca (Google Places via fetch) */}
+      <SearchPlaces
+        placeholder="Buscar endereço ou lugar..."
+        country="BR"
+        onPlaceSelected={(p: any) => {
+          // compatível com versões que mandam { lat, lng } ou { lat, lng, description }
+          animateTo(p.lat, p.lng, p.description);
+        }}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, position: 'relative' },
   map: { flex: 1 },
 });
 

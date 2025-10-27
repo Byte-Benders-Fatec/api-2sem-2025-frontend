@@ -12,6 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/app/_layout'; // importando o hook de tema
+import { Alert, ActivityIndicator } from 'react-native';
+import * as api from '@/lib/api';
+import { setAccessToken, refreshSession, clearSession } from '@/lib/session';
 
 // componente reutilizável para cada linha de opção
 type SettingsRowProps = {
@@ -49,12 +52,42 @@ export default function SettingsScreen() {
     // o useColorScheme já nos dá o tema atual. vamos usá-lo para o switch.
     const { colorScheme, setColorScheme } = useTheme();
 
+    // estado para o loading do logout
+    const [loggingOut, setLoggingOut] = useState(false);
+
     // estado para o switch de notificações (exemplo)
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
     const navigateTo = (path: Href) => {
         router.push(path);
     };
+
+    async function handleLogout() {
+        if (loggingOut) return;
+        try {
+        setLoggingOut(true);
+        
+        const data = await api.postJson<{ token: string }>(
+            '/auth/logout',
+            { },
+        );
+
+        // limpa sessão local
+        await clearSession();
+
+        // guarda o access_token no SecureStore via session.ts
+        await setAccessToken(data.token);
+
+        // Atualiza sessão completa (perfil + geo_api_key) via /auth/me
+        await refreshSession();
+
+        router.replace('../../'); // volta pra tela inicial
+        } catch (err: any) {
+        Alert.alert('Erro', err?.message || 'Não foi possível terminar a sessão.');
+        } finally {
+        setLoggingOut(false);
+        }
+    }
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -122,8 +155,16 @@ export default function SettingsScreen() {
                 
                 {/* --- Secção: Ações --- */}
                 <View style={styles.section}>
-                    <TouchableOpacity style={styles.logoutButton} onPress={() => alert('Lógica de Logout')}>
+                    <TouchableOpacity
+                    style={styles.logoutButton}
+                    onPress={handleLogout}
+                    disabled={loggingOut}
+                    >
+                    {loggingOut ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
                         <Text style={styles.logoutButtonText}>Terminar Sessão</Text>
+                    )}
                     </TouchableOpacity>
                 </View>
 

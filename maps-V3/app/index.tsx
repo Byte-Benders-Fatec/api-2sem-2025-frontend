@@ -34,7 +34,7 @@ export default function LandingScreen() {
       await saveProfile(me);
 
       // 4️⃣ Vai para a tela principal
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/mapa');
     } catch (err: any) {
       Alert.alert('Erro', err?.message || 'Falha ao entrar como visitante.');
     } finally {

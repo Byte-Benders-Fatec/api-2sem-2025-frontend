@@ -7,8 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+import * as api from '@/lib/api';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
@@ -57,24 +56,26 @@ export default function ChangePasswordScreen() {
         return;
       }
 
-      const res = await fetch(`${API_BASE_URL}/auth/start-change-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          current_password: currentPassword,
+      // const res = await fetch(`${API_BASE_URL}/auth/start-change-password`, {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //     Authorization: `Bearer ${token}`,
+      //   },
+      //   body: JSON.stringify({
+      //     current_password: currentPassword,
+      //     new_password: newPassword,
+      //     confirm_password: confirmPassword,
+      //   }),
+      // });
+
+      const data = await api.postJson(
+        '/auth/start-change-password',
+        { current_password: currentPassword,
           new_password: newPassword,
           confirm_password: confirmPassword,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        // 403 pode ser “Guest não pode alterar senha”
-        throw new Error(data?.error || data?.message || 'Falha ao iniciar alteração.');
-      }
+        },
+      );
 
       setStep('verify');
       Alert.alert('Código enviado', 'Verifique seu e-mail e informe o código.');
@@ -102,24 +103,14 @@ export default function ChangePasswordScreen() {
         return;
       }
 
-      const res = await fetch(`${API_BASE_URL}/auth/change-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          current_password: currentPassword,
+      const data = await api.postJson(
+        '/auth/change-password',
+        { current_password: currentPassword,
           new_password: newPassword,
           confirm_password: confirmPassword,
           code,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error || data?.message || 'Código inválido ou operação negada.');
-      }
+        },
+      );
 
       Alert.alert('Sucesso!', 'Sua senha foi alterada com sucesso.', [
         { text: 'OK', onPress: () => router.back() },

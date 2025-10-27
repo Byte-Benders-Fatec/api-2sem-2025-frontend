@@ -1,24 +1,18 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
+  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
-import { api } from '@/lib/api';
-import { saveProfile, MeResponse } from '@/lib/session';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+import * as api from '@/lib/api';
+import {
+  setAccessToken,
+  setTempToken,
+  refreshSession,
+  clearSession,
+} from '@/lib/session';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -46,18 +40,19 @@ export default function LoginScreen() {
 
     try {
       setIsLoading(true);
-      const res = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      // evita estado sujo se houver resquícios de sessão anterior
+      await clearSession();
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || 'Falha no login.');
-
-      if (!data?.login_token) throw new Error('Resposta inválida: login_token ausente.');
+      const data = await api.postJson<{ login_token: string }>(
+        '/auth/login',
+        { email, password },
+        { auth: 'none' }
+      );
 
       setLoginToken(data.login_token);
+      // armazena também no SecureStore via session.ts (padronização)
+      await setTempToken(data.login_token);
+
       setStep('verify');
       Alert.alert('Código enviado', `Enviamos um código para ${maskEmail(email)}.`);
     } catch (e: any) {
@@ -81,25 +76,18 @@ export default function LoginScreen() {
 
     try {
       setIsLoading(true);
-      const res = await fetch(`${API_BASE_URL}/auth/finalize-login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${loginToken}`,
-        },
-        body: JSON.stringify({ email, code }),
-      });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || 'Código inválido.');
+      const data = await api.postJson<{ token: string }>(
+        '/auth/finalize-login',
+        { email, code },
+        { auth: 'temp' }
+      );
 
-      if (!data?.token) throw new Error('Resposta inválida: token de sessão ausente.');
+      // guarda o access_token no SecureStore via session.ts
+      await setAccessToken(data.token);
 
-      await SecureStore.setItemAsync('access_token', data.token);
-
-      // 2) Busca o perfil no /me (já com Authorization via lib/api.ts)
-      const me = await api<MeResponse>('/auth/me', { method: 'GET' });
-      await saveProfile(me); // salva perfil e a api_key do segundo backend
+      // Atualiza sessão completa (perfil + geo_api_key) via /auth/me
+      await refreshSession();
 
       Alert.alert('Sucesso', 'Login realizado com sucesso!');
       router.replace('/(tabs)');
@@ -175,7 +163,7 @@ export default function LoginScreen() {
                 onPress={handleFinalizeLogin}
                 disabled={isLoading}
               >
-                {isLoading ? <ActivityIndicator /> : <Text style={styles.btnTextPrimary}>Finalizar Login</Text>}
+                {isLoading ? <ActivityIndicator /> : <Text style={styles.btnTextPrimary}>Enviar Código</Text>}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.buttonGhost}

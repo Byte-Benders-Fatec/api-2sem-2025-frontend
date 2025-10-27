@@ -90,7 +90,7 @@ export default function LoginScreen() {
       await refreshSession();
 
       Alert.alert('Sucesso', 'Login realizado com sucesso!');
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/mapa');
     } catch (e: any) {
       Alert.alert('Erro', e?.message || 'Falha ao finalizar login.');
     } finally {

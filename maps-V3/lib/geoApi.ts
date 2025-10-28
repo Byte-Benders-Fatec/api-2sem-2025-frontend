@@ -107,3 +107,22 @@ export async function fetchImoveisByCPF(cpf: string) {
 export async function fetchImovelById(id: string) {
   return geoApi<any>(`/imoveis/${id}`);
 }
+
+// ---- Plus Code ----
+export type PlusCodeResponse = {
+  id: string | number;
+  plus_code: {
+    global_code: string;
+    compound_code?: string;
+  };
+};
+
+export async function createImovelPlusCode(
+  id: string | number,
+  coords: { latitude: number; longitude: number }
+) {
+  return geoApi<PlusCodeResponse>(`/imoveis/${id}/plus-code`, {
+    method: 'POST',
+    body: JSON.stringify(coords),
+  });
+}

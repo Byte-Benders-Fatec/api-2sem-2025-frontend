@@ -8,10 +8,11 @@ type Props = {
   placeholder?: string;
   onPlaceSelected: (p: { lat: number; lng: number; description: string }) => void;
   country?: string; // 'BR' opcional
+  initialQuery?: string;
 };
 
-export default function SearchPlaces({ placeholder = 'Buscar endereço ou lugar...', onPlaceSelected, country = 'BR' }: Props) {
-  const [query, setQuery] = useState('');
+export default function SearchPlaces({ placeholder = 'Buscar endereço ou lugar...', onPlaceSelected, country = 'BR', initialQuery }: Props) {
+  const [query, setQuery] = useState(initialQuery ?? '');
   const [preds, setPreds] = useState<PlacePrediction[]>([]);
   const [loading, setLoading] = useState(false);
   const tokenRef = useRef<string>(newSessionToken());
@@ -39,6 +40,14 @@ export default function SearchPlaces({ placeholder = 'Buscar endereço ou lugar.
       }
     }, 350);
   }, [query]);
+
+  // useEffect(() => {
+  //   if (initialQuery !== undefined) setQuery(initialQuery);
+  // }, [initialQuery]);
+
+  useEffect(() => {
+    setQuery(initialQuery ?? '');
+  }, [initialQuery]);
 
   async function handleSelect(p: PlacePrediction) {
     try {

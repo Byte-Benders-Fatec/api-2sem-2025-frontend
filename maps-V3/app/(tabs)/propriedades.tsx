@@ -176,30 +176,72 @@ export default function PropriedadesScreen() {
         }
     };
 
+    // Helper: centroide de um Polygon (primeiro anel) em GeoJSON [ [ [lon,lat], ... ] ]
+    function polygonCentroid(coords: number[][][]): { lat: number; lng: number } | null {
+        if (!Array.isArray(coords) || !Array.isArray(coords[0]) || coords[0].length < 3) return null;
+        const ring = coords[0]; // anel externo
+        // Centróide de polígono (shoelace)
+        let area = 0;
+        let cx = 0;
+        let cy = 0;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const [x0, y0] = ring[j];
+            const [x1, y1] = ring[i];
+            const f = x0 * y1 - x1 * y0;
+            area += f;
+            cx += (x0 + x1) * f;
+            cy += (y0 + y1) * f;
+        }
+        area *= 0.5;
+        if (Math.abs(area) < 1e-12) {
+            // fallback: média simples dos vértices
+            const sum = ring.reduce((acc, [x, y]) => ({ x: acc.x + x, y: acc.y + y }), { x: 0, y: 0 });
+            return { lat: sum.y / ring.length, lng: sum.x / ring.length };
+        }
+        cx /= (6 * area);
+        cy /= (6 * area);
+        return { lat: cy, lng: cx };
+    }
+
     // Navega para o mapa com a propriedade selecionada
     const handleNavigateToMap = async (propertyId: number) => {
         try {
             // Busca detalhes completos da propriedade no mongo
             const propertyDetails = await getPropertyMongoDetails(propertyId);
+            
+            // console.log('📦 propertyDetails retornado do backend:', JSON.stringify(propertyDetails, null, 2));
 
-            if (propertyDetails.mongo_details?.plusCode) {
+            // 1) Tente usar o Plus Code (global_code) se existir
+            const plusGlobal = propertyDetails?.mongo_details?.properties?.plus_code?.global_code as string | undefined;
+            if (plusGlobal && plusGlobal.trim().length > 0) {
                 router.push({
-                    pathname: '/',
-                    params: { search: propertyDetails.mongo_details.plusCode }
+                  pathname: '/(tabs)/mapa',
+                  params: { search: plusGlobal }, // usamos a barra de busca para resolver o plus code
+                  ts: String(Date.now())
                 });
-            } else if (propertyDetails.mongo_details?.center) {
-                // Se não tiver plusCode, pode usar as coordenadas
-                const { lat, lng } = propertyDetails.mongo_details.center;
-                router.push({
-                    pathname: '/',
-                    params: {
-                        lat: lat.toString(),
-                        lng: lng.toString()
-                    }
-                });
-            } else {
-                Alert.alert('Aviso', 'Não foi possível localizar esta propriedade no mapa.');
+                return;    
+            } 
+        
+            // 2) Caso não tenha plus code, calcule o centroide do polígono e navegue por lat/lng
+            const coords = propertyDetails?.mongo_details?.geometry?.coordinates as number[][][] | undefined;
+            const centroid = coords ? polygonCentroid(coords) : null;
+
+            if (centroid) {
+            router.push({
+                pathname: '/(tabs)/mapa',
+                params: {
+                lat: String(centroid.lat),
+                lng: String(centroid.lng),
+                description: propertyDetails?.mongo_details?.properties?.cod_imovel ?? 'Propriedade',
+                ts: String(Date.now())
+                }
+            });
+            return;
             }
+
+            // 3) Se não tiver como localizar
+            Alert.alert('Aviso', 'Não foi possível localizar esta propriedade no mapa.');
+        
         } catch (error) {
             console.error('Erro ao buscar detalhes da propriedade:', error);
             Alert.alert('Erro', 'Não foi possível obter a localização da propriedade.');

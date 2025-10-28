@@ -69,6 +69,7 @@ export async function api<T = any>( path: string, opts: ApiOptions = {} ): Promi
 
   if ((auth === 'access' || auth === 'auto') && res.status === 401 && clearOn401) {
     // sessão inválida/expirada — limpe e deixe o chamador redirecionar
+    console.log('API: sessão inválida, limpando...');
     await clearSession();
   }
 

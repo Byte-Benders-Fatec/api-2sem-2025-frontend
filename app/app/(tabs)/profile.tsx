@@ -59,7 +59,6 @@ export default function ProfileScreen() {
             const profile = await loadProfile();
             if (!profile?.id) {
                 // Se não tiver perfil salvo, redireciona ou avisa
-                // Mas idealmente o layout já protege, ou o usuário acabou de logar
                 return;
             }
 
@@ -67,7 +66,6 @@ export default function ProfileScreen() {
             const user = await api<any>(`/users/${profile.id}`);
 
             // Monta URL da foto (timestamp para evitar cache)
-            // Usa variavel de ambiente ou localhost como fallback, igual ao api.ts
             const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000/api/v1';
             const photoUrl = `${baseUrl}/userphotos/${profile.id}/view?t=${new Date().getTime()}`;
 
@@ -99,13 +97,14 @@ export default function ProfileScreen() {
     const handleSave = async () => {
         try {
             setIsSaving(true);
-            // Envia PUT para atualizar
-            // Precisamos enviar todos os campos que o backend espera no update, 
-            // ou pelo menos os que queremos manter.
+
+            // Remove caracteres não numéricos do CPF
+            const cleanCpf = tempUserData.cpf.replace(/\D/g, '');
+
             await putJson(`/users/${userData.id}`, {
                 name: tempUserData.name,
                 email: tempUserData.email,
-                cpf: tempUserData.cpf,
+                cpf: cleanCpf,
                 is_active: tempUserData.is_active,
                 system_role_id: tempUserData.system_role_id
             });
@@ -170,7 +169,6 @@ export default function ProfileScreen() {
                 formData.append('file', { uri: localUri, name: filename, type });
 
                 // Backend espera PUT em /userphotos/:id
-                // Usamos api genérica pois postForm força POST
                 await api(`/userphotos/${userData.id}`, {
                     method: 'PUT',
                     formData: formData
@@ -210,17 +208,8 @@ export default function ProfileScreen() {
                         <Image
                             source={{ uri: userData.avatar }}
                             style={styles.avatar}
-                            // Adiciona um placeholder caso falhe ou enquanto carrega
                             defaultSource={require('@/assets/images/react-logo.png')}
                         />
-                        {/* Botão de editar foto sempre visível ou só na edição? 
-                        No código original era só na edição. 
-                        No plano: "Clicar no ícone de câmera".
-                        Vou manter só na edição para consistência com o original, 
-                        ou deixar sempre se o usuário quiser trocar rápido.
-                        O original: {isEditing && (...)}
-                        Vou manter assim.
-                    */}
                         {isEditing && (
                             <TouchableOpacity style={styles.editAvatarButton} onPress={handlePickimage}>
                                 <MaterialIcons name="camera-alt" size={24} color="white" />
@@ -253,7 +242,7 @@ export default function ProfileScreen() {
                                 style={styles.input}
                                 value={tempUserData.cpf}
                                 onChangeText={(masked, unmasked) => {
-                                    handleInputChange('cpf', masked) // ou unmasked se o backend preferir limpo
+                                    handleInputChange('cpf', masked)
                                 }}
                                 mask={cpfMask}
                                 keyboardType="numeric"

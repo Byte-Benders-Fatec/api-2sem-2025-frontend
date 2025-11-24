@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  TextInput,
+  Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -16,6 +18,7 @@ import {
   searchPropertiesByCPF,
   deleteProperty,
   getPropertyMongoDetails,
+  updateProperty,
   UserProperty
 } from '@/services/userProperties';
 import { loadProfile } from '@/lib/session';
@@ -24,9 +27,13 @@ interface PropertyDisplay {
   id: number;
   name: string;
   plusCode: string;
+  compoundCode?: string;
   type: 'Rural' | 'Urbano';
   area: string;
+  perimeter?: string;
   registryNumber: string;
+  municipio?: string;
+  cod_estado?: string;
 }
 
 type PropertyCardProps = {
@@ -34,9 +41,10 @@ type PropertyCardProps = {
   onViewOnMap: () => void;
   onCreatePlusCode: () => void;
   onDelete: () => void;
+  onEditName: () => void;
 };
 
-const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewOnMap, onCreatePlusCode, onDelete }) => {
+const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewOnMap, onCreatePlusCode, onDelete, onEditName }) => {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -46,31 +54,63 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewOnMap, onCr
           color={property.type === 'Rural' ? '#28a745' : '#007bff'}
         />
         <Text style={styles.cardTitle}>{property.name}</Text>
+        <TouchableOpacity onPress={onEditName}>
+          <Ionicons name="pencil-outline" size={20} color="#666" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.cardBody}>
         <Text style={styles.infoText}>
           <Text style={styles.infoLabel}>Matrícula:</Text> {property.registryNumber}
         </Text>
-        {!!property.plusCode && (
+
+        {/* Novos Campos */}
+        {property.municipio && (
           <Text style={styles.infoText}>
-            <Text style={styles.infoLabel}>Plus Code:</Text> {property.plusCode}
+            <Text style={styles.infoLabel}>Local:</Text> {property.municipio} - {property.cod_estado}
           </Text>
         )}
-        <Text style={styles.infoText}>
-          <Text style={styles.infoLabel}>Área:</Text> {property.area}
-        </Text>
+
+        {!!property.plusCode && (
+          <>
+            <Text style={styles.infoText}>
+              <Text style={styles.infoLabel}>Plus Code:</Text> {property.plusCode}
+            </Text>
+            {property.compoundCode && (
+              <Text style={styles.infoText}>
+                <Text style={styles.infoLabel}>Endereço:</Text> {property.compoundCode}
+              </Text>
+            )}
+          </>
+        )}
+
+        <View style={styles.rowInfo}>
+          <Text style={styles.infoText}>
+            <Text style={styles.infoLabel}>Área:</Text> {property.area || 'Calculando...'}
+          </Text>
+          {property.perimeter && (
+            <Text style={[styles.infoText, { marginLeft: 15 }]}>
+              <Text style={styles.infoLabel}>Perímetro:</Text> {property.perimeter}
+            </Text>
+          )}
+        </View>
       </View>
 
       <View style={styles.cardActions}>
         <TouchableOpacity style={styles.actionButton} onPress={onViewOnMap}>
           <Ionicons name="map-outline" size={20} color="#007BFF" />
-          <Text style={styles.actionButtonText}>Ver no Mapa</Text>
+          <Text style={styles.actionButtonText}>Mapa</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={onCreatePlusCode}>
-          <Ionicons name="add-circle-outline" size={20} color="#28a745" />
-          <Text style={[styles.actionButtonText, { color: '#28a745' }]}>Criar Plus Code</Text>
+          <Ionicons
+            name={property.plusCode ? "refresh-circle-outline" : "add-circle-outline"}
+            size={20}
+            color={property.plusCode ? "#FFA500" : "#28a745"}
+          />
+          <Text style={[styles.actionButtonText, { color: property.plusCode ? "#FFA500" : "#28a745" }]}>
+            {property.plusCode ? "Atualizar Plus Code" : "Criar Plus Code"}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={onDelete}>
@@ -88,14 +128,10 @@ export default function PropriedadesScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
 
-  const convertToDisplay = (prop: UserProperty): PropertyDisplay => ({
-    id: prop.id,
-    name: prop.display_name || 'Propriedade sem nome',
-    plusCode: '',
-    type: 'Rural',
-    area: '',
-    registryNumber: prop.registry_number || 'N/A',
-  });
+  // Estados para edição de nome
+  const [editingProperty, setEditingProperty] = useState<{ id: number; name: string } | null>(null);
+  const [newPropertyName, setNewPropertyName] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -107,8 +143,38 @@ export default function PropriedadesScreen() {
     try {
       setIsLoading(true);
       const userProperties = await getMyProperties();
-      const displayProperties = userProperties.map(convertToDisplay);
-      setProperties(displayProperties);
+
+      const detailedProperties = await Promise.all(userProperties.map(async (prop) => {
+        try {
+          const details = await getPropertyMongoDetails(prop.id);
+          const mongoProps = details.mongo_details.properties;
+          const plus = mongoProps.plus_code;
+
+          return {
+            id: prop.id,
+            name: prop.display_name || 'Propriedade sem nome',
+            plusCode: plus?.global_code || '',
+            compoundCode: plus?.compound_code || '',
+            type: 'Rural',
+            area: mongoProps.area ? `${mongoProps.area.toFixed(2)} ha` : (mongoProps.num_area ? `${mongoProps.num_area.toFixed(2)} ha` : ''),
+            perimeter: mongoProps.perimeter ? `${(mongoProps.perimeter / 1000).toFixed(2)} km` : '',
+            registryNumber: prop.registry_number || 'N/A',
+            municipio: mongoProps.municipio,
+            cod_estado: mongoProps.cod_estado
+          } as PropertyDisplay;
+        } catch (e) {
+          return {
+            id: prop.id,
+            name: prop.display_name || 'Propriedade sem nome',
+            plusCode: '',
+            type: 'Rural',
+            area: '',
+            registryNumber: prop.registry_number || 'N/A',
+          } as PropertyDisplay;
+        }
+      }));
+
+      setProperties(detailedProperties);
     } catch (error: any) {
       console.error('Erro ao carregar propriedades:', error);
       Alert.alert('Erro', 'Não foi possível carregar as propriedades.');
@@ -211,7 +277,6 @@ export default function PropriedadesScreen() {
   };
 
   const handleCreatePlusCode = (propertyId: number) => {
-    // vai para o mapa em modo de seleção
     router.push({
       pathname: '/(tabs)/mapa',
       params: {
@@ -246,6 +311,36 @@ export default function PropriedadesScreen() {
     );
   };
 
+  const handleEditName = (property: PropertyDisplay) => {
+    setEditingProperty({ id: property.id, name: property.name });
+    setNewPropertyName(property.name);
+  };
+
+  const handleSaveName = async () => {
+    if (!editingProperty) return;
+    if (!newPropertyName.trim()) {
+      Alert.alert('Erro', 'O nome da propriedade não pode estar vazio.');
+      return;
+    }
+
+    try {
+      setIsSavingName(true);
+      await updateProperty(editingProperty.id, { display_name: newPropertyName });
+
+      setProperties(prev => prev.map(p =>
+        p.id === editingProperty.id ? { ...p, name: newPropertyName } : p
+      ));
+
+      setEditingProperty(null);
+      Alert.alert('Sucesso', 'Nome da propriedade atualizado!');
+    } catch (error: any) {
+      console.error('Erro ao atualizar nome:', error);
+      Alert.alert('Erro', 'Não foi possível atualizar o nome da propriedade.');
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -272,13 +367,6 @@ export default function PropriedadesScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Cadastrar Nova Propriedade: desabilitado por enquanto */}
-
-        {/* <TouchableOpacity style={styles.mainButton} onPress={() => router.push('/')}>
-          <Ionicons name="add-circle-outline" size={24} color="white" />
-          <Text style={styles.mainButtonText}>Cadastrar Nova Propriedade no Mapa</Text>
-        </TouchableOpacity> */}
-
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#007BFF" />
@@ -294,6 +382,7 @@ export default function PropriedadesScreen() {
                   onViewOnMap={() => handleNavigateToMap(prop.id)}
                   onCreatePlusCode={() => handleCreatePlusCode(prop.id)}
                   onDelete={() => handleDeleteProperty(prop.id, prop.name)}
+                  onEditName={() => handleEditName(prop)}
                 />
               ))
             ) : (
@@ -319,6 +408,47 @@ export default function PropriedadesScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Edit Name Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={!!editingProperty}
+        onRequestClose={() => setEditingProperty(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Editar Nome da Propriedade</Text>
+            <TextInput
+              style={styles.input}
+              value={newPropertyName}
+              onChangeText={setNewPropertyName}
+              placeholder="Nome da propriedade"
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setEditingProperty(null)}
+                disabled={isSavingName}
+              >
+                <Text style={styles.modalButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveName}
+                disabled={isSavingName}
+              >
+                {isSavingName ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: 'white' }]}>Salvar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -355,8 +485,30 @@ const styles = StyleSheet.create({
   cardBody: { marginBottom: 10 },
   infoLabel: { fontWeight: 'bold', color: '#555' },
   infoText: { fontSize: 16, color: '#666', marginBottom: 5 },
+  rowInfo: { flexDirection: 'row', marginTop: 5 },
   cardActions: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' },
   actionButton: { flexDirection: 'row', alignItems: 'center' },
-  actionButtonText: { fontSize: 16, marginLeft: 5, color: '#007BFF' },
+  actionButtonText: { fontSize: 14, marginLeft: 5, color: '#007BFF', fontWeight: 'bold' },
   emptyListText: { textAlign: 'center', fontSize: 16, color: '#888', marginTop: 40 },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white', borderRadius: 15, padding: 20, width: '85%',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5,
+  },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  input: {
+    borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, fontSize: 16, marginBottom: 20,
+  },
+  modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
+  modalButton: {
+    flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginHorizontal: 5,
+  },
+  cancelButton: { backgroundColor: '#f0f0f0' },
+  saveButton: { backgroundColor: '#007BFF' },
+  modalButtonText: { fontSize: 16, fontWeight: '600', color: '#333' },
 });

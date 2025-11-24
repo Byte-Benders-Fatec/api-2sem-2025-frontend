@@ -30,15 +30,20 @@ export interface PropertyWithMongoDetails extends UserProperty {
       nome_imovel?: string;
       num_area: number;
       municipio?: string;
+      cod_estado?: string;
       ind_status?: string;
       cpf?: string;
-      // Adicione outros campos conforme necessário
+      area?: number;
+      perimeter?: number;
+      plus_code?: {
+        global_code: string;
+        compound_code: string;
+      };
     };
     center?: {
       lat: number;
       lng: number;
     };
-    plusCode?: string;
   };
 }
 
@@ -46,7 +51,7 @@ export interface PropertyWithMongoDetails extends UserProperty {
  * Lista todas as propriedades do usuário logado (do MySQL)
  */
 export const getMyProperties = () =>
-  api<UserProperty[]>('/user-properties', { 
+  api<UserProperty[]>('/user-properties', {
     method: 'GET'
   });
 
@@ -89,5 +94,5 @@ export const updateProperty = (id: number, data: { display_name?: string; regist
  */
 export const deleteProperty = (id: number) =>
   api<{ message: string }>(`/user-properties/${id}`, {
-    method: 'DELETE' 
+    method: 'DELETE'
   });

@@ -276,15 +276,44 @@ export default function PropriedadesScreen() {
     }
   };
 
-  const handleCreatePlusCode = (propertyId: number) => {
-    router.push({
-      pathname: '/(tabs)/mapa',
-      params: {
-        mode: 'createPlusCode',
-        propertyId: String(propertyId),
-        ts: String(Date.now())
+  const handleCreatePlusCode = async (propertyId: number) => {
+    try {
+      const propertyDetails = await getPropertyMongoDetails(propertyId);
+      const plusCodeCoords = propertyDetails?.mongo_details?.properties?.plus_code?.coordinates;
+
+      let lat: string | undefined;
+      let lng: string | undefined;
+
+      if (plusCodeCoords) {
+        lat = String(plusCodeCoords.latitude);
+        lng = String(plusCodeCoords.longitude);
+      } else {
+        const coords = propertyDetails?.mongo_details?.geometry?.coordinates as number[][][] | undefined;
+        const centroid = coords ? polygonCentroid(coords) : null;
+        if (centroid) {
+          lat = String(centroid.lat);
+          lng = String(centroid.lng);
+        }
       }
-    });
+
+      if (lat && lng) {
+        router.push({
+          pathname: '/(tabs)/mapa',
+          params: {
+            mode: 'createPlusCode',
+            propertyId: String(propertyId),
+            lat,
+            lng,
+            ts: String(Date.now())
+          }
+        });
+      } else {
+        Alert.alert('Aviso', 'Não foi possível determinar a localização da propriedade.');
+      }
+    } catch (error) {
+      console.error('Erro ao preparar criação de Plus Code:', error);
+      Alert.alert('Erro', 'Não foi possível carregar os detalhes da propriedade.');
+    }
   };
 
   const handleDeleteProperty = (propertyId: number, propertyName: string) => {

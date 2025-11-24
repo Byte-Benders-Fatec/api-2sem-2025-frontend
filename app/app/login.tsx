@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
+  View, Text, TextInput, StyleSheet, TouchableOpacity, Alert,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as api from '@/lib/api';
+
+import '../utils/i18n'
+import { useTranslation } from 'react-i18next';
+
 import {
   setAccessToken,
   setTempToken,
@@ -24,6 +28,8 @@ export default function LoginScreen() {
   const [loginToken, setLoginToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const { t, i18n } = useTranslation();
+
   const maskEmail = (value: string) => {
     const [user, domain] = value.split('@');
     if (!user || !domain) return value;
@@ -34,7 +40,7 @@ export default function LoginScreen() {
   // Etapa 1: email + senha -> /auth/login
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Erro', 'Preencha e-mail e senha.');
+      Alert.alert(t('Erro'), t('Preencha e-mail e senha.'));
       return;
     }
 
@@ -54,9 +60,12 @@ export default function LoginScreen() {
       await setTempToken(data.login_token);
 
       setStep('verify');
-      Alert.alert('Código enviado', `Enviamos um código para ${maskEmail(email)}.`);
+      Alert.alert(
+        t('Código enviado'),
+        t('Enviamos um código para {{email}}.', { email: maskEmail(email) })
+      );
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Falha no login.');
+      Alert.alert(t('Erro'), e?.message || t('Falha no login.'));
     } finally {
       setIsLoading(false);
     }
@@ -65,11 +74,11 @@ export default function LoginScreen() {
   // Etapa 2: Authorization: Bearer <login_token> + { email, code }
   const handleFinalizeLogin = async () => {
     if (!code) {
-      Alert.alert('Erro', 'Informe o código recebido por e-mail.');
+      Alert.alert(t('Erro'), t('Informe o código recebido por e-mail.'));
       return;
     }
     if (!loginToken) {
-      Alert.alert('Sessão inválida', 'Refaça o login.');
+      Alert.alert(t('Sessão inválida'), t('Refaça o login.'));
       setStep('login');
       return;
     }
@@ -89,10 +98,10 @@ export default function LoginScreen() {
       // Atualiza sessão completa (perfil + geo_api_key) via /auth/me
       await refreshSession();
 
-      Alert.alert('Sucesso', 'Login realizado com sucesso!');
+      Alert.alert(t('Sucesso'), t('Login realizado com sucesso!'));
       router.replace('/(tabs)/mapa');
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Falha ao finalizar login.');
+      Alert.alert(t('Erro'), e?.message || t('Falha ao finalizar login.'));
     } finally {
       setIsLoading(false);
     }
@@ -106,14 +115,14 @@ export default function LoginScreen() {
       >
         <ScrollView contentContainerStyle={styles.scroll}>
           <Text style={styles.title}>
-            {step === 'login' ? 'Entrar' : 'Verificação'}
+            {step === 'login' ? t('Entrar') : t('Verificação')}
           </Text>
 
           {step === 'login' ? (
             <>
               <TextInput
                 style={styles.input}
-                placeholder="E-mail"
+                placeholder={t('E-mail')}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 value={email}
@@ -122,7 +131,7 @@ export default function LoginScreen() {
               <View style={styles.inputRow}>
                 <TextInput
                   style={[styles.input, styles.inputFlex]}
-                  placeholder="Senha"
+                  placeholder={t('Senha')}
                   secureTextEntry={!isPasswordVisible}
                   value={password}
                   onChangeText={setPassword}
@@ -142,17 +151,17 @@ export default function LoginScreen() {
                 onPress={handleLogin}
                 disabled={isLoading}
               >
-                {isLoading ? <ActivityIndicator /> : <Text style={styles.btnTextPrimary}>Continuar</Text>}
+                {isLoading ? <ActivityIndicator /> : <Text style={styles.btnTextPrimary}>{t('Continuar')}</Text>}
               </TouchableOpacity>
             </>
           ) : (
             <>
               <Text style={styles.helper}>
-                Enviamos um código para <Text style={styles.bold}>{maskEmail(email)}</Text>
+                {t('Enviamos um código para')} <Text style={styles.bold}>{maskEmail(email)}</Text>
               </Text>
               <TextInput
                 style={styles.input}
-                placeholder="Código (6 dígitos)"
+                placeholder={t('Código (6 dígitos)')}
                 keyboardType="number-pad"
                 value={code}
                 onChangeText={setCode}
@@ -163,14 +172,14 @@ export default function LoginScreen() {
                 onPress={handleFinalizeLogin}
                 disabled={isLoading}
               >
-                {isLoading ? <ActivityIndicator /> : <Text style={styles.btnTextPrimary}>Enviar Código</Text>}
+                {isLoading ? <ActivityIndicator /> : <Text style={styles.btnTextPrimary}>{t('Enviar Código')}</Text>}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.buttonGhost}
                 onPress={() => setStep('login')}
                 disabled={isLoading}
               >
-                <Text style={styles.btnTextGhost}>Voltar</Text>
+                <Text style={styles.btnTextGhost}>{t('Voltar')}</Text>
               </TouchableOpacity>
             </>
           )}

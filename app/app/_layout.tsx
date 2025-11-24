@@ -5,6 +5,9 @@ import "react-native-reanimated";
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useColorScheme as _useColorScheme } from 'react-native';
 
+import '../utils/i18n';
+import { useTranslation } from 'react-i18next';
+
 type ThemeContextType = {
   colorScheme: 'light' | 'dark';
   setColorScheme: (scheme: 'light' | 'dark') => void;
@@ -41,6 +44,8 @@ export function useTheme() {
 
 function AppContent() {
   const { colorScheme } = useTheme();
+  const { t } = useTranslation();
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
@@ -49,10 +54,10 @@ function AppContent() {
 
         <Stack.Screen name="(tabs)" options={{ headerShown: false }}/>
 
-        <Stack.Screen name="login" options={{ headerShown: true, title: 'Entrar' }} />
-        <Stack.Screen name="register" options={{ headerShown: true, title: 'Cadastro' }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }}/>      
-        <Stack.Screen name="Alterar_senha" options={{ title: 'Alterar Senha' }} />
+        <Stack.Screen name="login" options={{ headerShown: true, title: t('Entrar') }} />
+        <Stack.Screen name="register" options={{ headerShown: true, title: t('Cadastro') }} />
+        <Stack.Screen name="modal" options={{ presentation: 'modal', title: t('Modal') }}/>      
+        <Stack.Screen name="Alterar_senha" options={{ title: t('Alterar Senha') }} />
       </Stack>      
       <StatusBar style="auto" />
     </ThemeProvider>

@@ -1,16 +1,12 @@
-import { Ionicons } from '@expo/vector-icons';
+import React, { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useState, useCallback } from 'react';
 import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ActivityIndicator,
+  Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
+
 import {
   getMyProperties,
   searchPropertiesByCPF,
@@ -20,14 +16,14 @@ import {
 } from '@/services/userProperties';
 import { loadProfile } from '@/lib/session';
 
-interface PropertyDisplay {
+type PropertyDisplay = {
   id: number;
   name: string;
-  plusCode: string;
+  plusCode?: string;
   type: 'Rural' | 'Urbano';
   area: string;
   registryNumber: string;
-}
+};
 
 type PropertyCardProps = {
   property: PropertyDisplay;
@@ -37,6 +33,12 @@ type PropertyCardProps = {
 };
 
 const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewOnMap, onCreatePlusCode, onDelete }) => {
+  const copyPlusCode = async (code?: string) => {
+    if (!code) return Alert.alert('Aviso', 'Nenhum Plus Code disponível.');
+    await Clipboard.setStringAsync(code);
+    Alert.alert('Copiado', `Plus Code ${code} copiado para a área de transferência.`);
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -52,13 +54,27 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewOnMap, onCr
         <Text style={styles.infoText}>
           <Text style={styles.infoLabel}>Matrícula:</Text> {property.registryNumber}
         </Text>
+
         {!!property.plusCode && (
-          <Text style={styles.infoText}>
-            <Text style={styles.infoLabel}>Plus Code:</Text> {property.plusCode}
-          </Text>
+          <View style={{ marginTop: 6 }}>
+            <Text style={styles.infoText}>
+              <Text style={styles.infoLabel}>Plus Code:</Text> {property.plusCode}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+              <TouchableOpacity style={styles.smallButton} onPress={() => onViewOnMap()}>
+                <Ionicons name="map-outline" size={16} color="#fff" />
+                <Text style={styles.smallButtonText}>Ver</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.smallButton, { backgroundColor: '#6b7280' }]} onPress={() => copyPlusCode(property.plusCode)}>
+                <Ionicons name="copy-outline" size={16} color="#fff" />
+                <Text style={styles.smallButtonText}>Copiar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
-        <Text style={styles.infoText}>
-          <Text style={styles.infoLabel}>Área:</Text> {property.area}
+
+        <Text style={[styles.infoText, { marginTop: 8 }]}>
+          <Text style={styles.infoLabel}>Área:</Text> {property.area || '-'}
         </Text>
       </View>
 
@@ -91,9 +107,9 @@ export default function PropriedadesScreen() {
   const convertToDisplay = (prop: UserProperty): PropertyDisplay => ({
     id: prop.id,
     name: prop.display_name || 'Propriedade sem nome',
-    plusCode: '',
+    plusCode: undefined, // será preenchido depois
     type: 'Rural',
-    area: '',
+    area: prop.area?.toString?.() ?? '',
     registryNumber: prop.registry_number || 'N/A',
   });
 
@@ -109,9 +125,25 @@ export default function PropriedadesScreen() {
       const userProperties = await getMyProperties();
       const displayProperties = userProperties.map(convertToDisplay);
       setProperties(displayProperties);
+
+      // Busca os plus codes (paralelo, não bloqueante)
+      const enriched = await Promise.all(displayProperties.map(async (dp) => {
+        try {
+          const details = await getPropertyMongoDetails(dp.id);
+          const plus = details?.mongo_details?.properties?.plus_code?.global_code as string | undefined;
+          return { ...dp, plusCode: plus ?? undefined };
+        } catch (e) {
+          // se falhar para uma propriedade, mantemos sem plusCode
+          console.warn('failed get details for property', dp.id, e);
+          return dp;
+        }
+      }));
+
+      setProperties(enriched);
     } catch (error: any) {
       console.error('Erro ao carregar propriedades:', error);
       Alert.alert('Erro', 'Não foi possível carregar as propriedades.');
+      setProperties([]);
     } finally {
       setIsLoading(false);
     }
@@ -158,49 +190,56 @@ export default function PropriedadesScreen() {
     }
   };
 
-  function polygonCentroid(coords: number[][][]): { lat: number; lng: number } | null {
-    if (!Array.isArray(coords) || !Array.isArray(coords[0]) || coords[0].length < 3) return null;
-    const ring = coords[0];
-    let area = 0, cx = 0, cy = 0;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [x0, y0] = ring[j];
-      const [x1, y1] = ring[i];
-      const f = x0 * y1 - x1 * y0;
-      area += f; cx += (x0 + x1) * f; cy += (y0 + y1) * f;
-    }
-    area *= 0.5;
-    if (Math.abs(area) < 1e-12) {
-      const sum = ring.reduce((acc, [x, y]) => ({ x: acc.x + x, y: acc.y + y }), { x: 0, y: 0 });
-      return { lat: sum.y / ring.length, lng: sum.x / ring.length };
-    }
-    cx /= (6 * area); cy /= (6 * area);
-    return { lat: cy, lng: cx };
-  }
-
   const handleNavigateToMap = async (propertyId: number) => {
     try {
-      const propertyDetails = await getPropertyMongoDetails(propertyId);
+      // tenta usar plusCode se já disponível na lista
+      const prop = properties.find(p => p.id === propertyId);
+      const plus = prop?.plusCode;
+      if (plus && plus.trim().length > 0) {
+        router.push({ pathname: '/(tabs)/mapa', params: { search: plus, ts: String(Date.now()) } });
+        return;
+      }
 
-      const plusGlobal = propertyDetails?.mongo_details?.properties?.plus_code?.global_code as string | undefined;
+      // se não, tenta buscar detalhes e extrair centroid/plusCode
+      const details = await getPropertyMongoDetails(propertyId);
+      const plusGlobal = details?.mongo_details?.properties?.plus_code?.global_code as string | undefined;
       if (plusGlobal && plusGlobal.trim().length > 0) {
         router.push({ pathname: '/(tabs)/mapa', params: { search: plusGlobal, ts: String(Date.now()) } });
         return;
       }
 
-      const coords = propertyDetails?.mongo_details?.geometry?.coordinates as number[][][] | undefined;
-      const centroid = coords ? polygonCentroid(coords) : null;
-
-      if (centroid) {
-        router.push({
-          pathname: '/(tabs)/mapa',
-          params: {
-            lat: String(centroid.lat),
-            lng: String(centroid.lng),
-            description: propertyDetails?.mongo_details?.properties?.cod_imovel ?? 'Propriedade',
-            ts: String(Date.now())
+      const coords = details?.mongo_details?.geometry?.coordinates as number[][][] | undefined;
+      if (coords) {
+        // calcula centróide (mesma lógica que você já tem no mapa)
+        const centroid = (() => {
+          const ring = coords[0];
+          let area = 0, cx = 0, cy = 0;
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const [x0, y0] = ring[j];
+            const [x1, y1] = ring[i];
+            const f = x0 * y1 - x1 * y0;
+            area += f; cx += (x0 + x1) * f; cy += (y0 + y1) * f;
           }
-        });
-        return;
+          area *= 0.5;
+          if (Math.abs(area) < 1e-12) {
+            const sum = ring.reduce((acc, [x, y]) => ({ x: acc.x + x, y: acc.y + y }), { x: 0, y: 0 });
+            return { lat: sum.y / ring.length, lng: sum.x / ring.length };
+          }
+          cx /= (6 * area); cy /= (6 * area);
+          return { lat: cy, lng: cx };
+        })();
+        if (centroid) {
+          router.push({
+            pathname: '/(tabs)/mapa',
+            params: {
+              lat: String(centroid.lat),
+              lng: String(centroid.lng),
+              description: details?.mongo_details?.properties?.cod_imovel ?? 'Propriedade',
+              ts: String(Date.now())
+            }
+          });
+          return;
+        }
       }
 
       Alert.alert('Aviso', 'Não foi possível localizar esta propriedade no mapa.');
@@ -211,7 +250,6 @@ export default function PropriedadesScreen() {
   };
 
   const handleCreatePlusCode = (propertyId: number) => {
-    // vai para o mapa em modo de seleção
     router.push({
       pathname: '/(tabs)/mapa',
       params: {
@@ -271,13 +309,6 @@ export default function PropriedadesScreen() {
             )}
           </TouchableOpacity>
         )}
-
-        {/* Cadastrar Nova Propriedade: desabilitado por enquanto */}
-
-        {/* <TouchableOpacity style={styles.mainButton} onPress={() => router.push('/')}>
-          <Ionicons name="add-circle-outline" size={24} color="white" />
-          <Text style={styles.mainButtonText}>Cadastrar Nova Propriedade no Mapa</Text>
-        </TouchableOpacity> */}
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -358,5 +389,11 @@ const styles = StyleSheet.create({
   cardActions: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' },
   actionButton: { flexDirection: 'row', alignItems: 'center' },
   actionButtonText: { fontSize: 16, marginLeft: 5, color: '#007BFF' },
+  smallButton: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10,
+    backgroundColor: '#007BFF', borderRadius: 8
+  },
+  smallButtonText: { color: '#fff', marginLeft: 6, fontWeight: '700' },
   emptyListText: { textAlign: 'center', fontSize: 16, color: '#888', marginTop: 40 },
 });
+

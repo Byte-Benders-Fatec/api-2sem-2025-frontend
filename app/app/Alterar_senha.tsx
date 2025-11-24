@@ -9,8 +9,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import * as api from '@/lib/api';
 
+import '../utils/i18n';
+import { useTranslation } from 'react-i18next';
+
 export default function ChangePasswordScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   // fluxo em duas etapas
   const [step, setStep] = useState<'start' | 'verify'>('start');
@@ -29,15 +33,15 @@ export default function ChangePasswordScreen() {
 
   const validatePasswords = () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Erro', 'Por favor, preencha todos os campos.');
+      Alert.alert(t('Erro'), t('Por favor, preencha todos os campos.'));
       return false;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert('Erro', 'A nova senha e a confirmação não correspondem.');
+      Alert.alert(t('Erro'), t('A nova senha e a confirmação não correspondem.'));
       return false;
     }
     if (newPassword.length < 8) {
-      Alert.alert('Senha Fraca', 'A nova senha deve ter pelo menos 8 caracteres.');
+      Alert.alert(t('Senha Fraca'), t('A nova senha deve ter pelo menos 8 caracteres.'));
       return false;
     }
     return true;
@@ -51,36 +55,24 @@ export default function ChangePasswordScreen() {
       setIsLoading(true);
       const token = await SecureStore.getItemAsync('access_token');
       if (!token) {
-        Alert.alert('Sessão expirada', 'Faça login novamente.');
+        Alert.alert(t('Sessão expirada'), t('Faça login novamente.'));
         router.replace('/login');
         return;
       }
 
-      // const res = await fetch(`${API_BASE_URL}/auth/start-change-password`, {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //     Authorization: `Bearer ${token}`,
-      //   },
-      //   body: JSON.stringify({
-      //     current_password: currentPassword,
-      //     new_password: newPassword,
-      //     confirm_password: confirmPassword,
-      //   }),
-      // });
-
       const data = await api.postJson(
         '/auth/start-change-password',
-        { current_password: currentPassword,
+        {
+          current_password: currentPassword,
           new_password: newPassword,
           confirm_password: confirmPassword,
         },
       );
 
       setStep('verify');
-      Alert.alert('Código enviado', 'Verifique seu e-mail e informe o código.');
+      Alert.alert(t('Código enviado'), t('Verifique seu e-mail e informe o código.'));
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Não foi possível iniciar a alteração.');
+      Alert.alert(t('Erro'), e?.message || t('Não foi possível iniciar a alteração.'));
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +81,7 @@ export default function ChangePasswordScreen() {
   // Etapa 2: confirma com o código
   const handleFinalizeChange = async () => {
     if (!code) {
-      Alert.alert('Erro', 'Informe o código recebido por e-mail.');
+      Alert.alert(t('Erro'), t('Informe o código recebido por e-mail.'));
       return;
     }
     if (!validatePasswords()) return;
@@ -98,25 +90,26 @@ export default function ChangePasswordScreen() {
       setIsLoading(true);
       const token = await SecureStore.getItemAsync('access_token');
       if (!token) {
-        Alert.alert('Sessão expirada', 'Faça login novamente.');
+        Alert.alert(t('Sessão expirada'), t('Faça login novamente.'));
         router.replace('/login');
         return;
       }
 
       const data = await api.postJson(
         '/auth/change-password',
-        { current_password: currentPassword,
+        {
+          current_password: currentPassword,
           new_password: newPassword,
           confirm_password: confirmPassword,
           code,
         },
       );
 
-      Alert.alert('Sucesso!', 'Sua senha foi alterada com sucesso.', [
-        { text: 'OK', onPress: () => router.back() },
+      Alert.alert(t('Sucesso!'), t('Sua senha foi alterada com sucesso.'), [
+        { text: t('OK'), onPress: () => router.back() },
       ]);
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Não foi possível concluir a alteração.');
+      Alert.alert(t('Erro'), e?.message || t('Não foi possível concluir a alteração.'));
     } finally {
       setIsLoading(false);
     }
@@ -130,14 +123,14 @@ export default function ChangePasswordScreen() {
       >
         <ScrollView contentContainerStyle={styles.container}>
           <Text style={styles.title}>
-            {step === 'start' ? 'Alterar Senha' : 'Confirmar Alteração'}
+            {step === 'start' ? t('Alterar Senha') : t('Confirmar Alteração')}
           </Text>
 
           {/* senha atual */}
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
-              placeholder="Senha Atual"
+              placeholder={t('Senha Atual')}
               secureTextEntry={!isCurrentPasswordVisible}
               value={currentPassword}
               onChangeText={setCurrentPassword}
@@ -151,7 +144,7 @@ export default function ChangePasswordScreen() {
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
-              placeholder="Nova Senha"
+              placeholder={t('Nova Senha')}
               secureTextEntry={!isNewPasswordVisible}
               value={newPassword}
               onChangeText={setNewPassword}
@@ -165,7 +158,7 @@ export default function ChangePasswordScreen() {
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
-              placeholder="Confirmar Nova Senha"
+              placeholder={t('Confirmar Nova Senha')}
               secureTextEntry={!isConfirmPasswordVisible}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
@@ -177,13 +170,13 @@ export default function ChangePasswordScreen() {
 
           {step === 'start' ? (
             <TouchableOpacity style={styles.button} onPress={handleStartChange} disabled={isLoading}>
-              {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Enviar Código</Text>}
+              {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('Enviar Código')}</Text>}
             </TouchableOpacity>
           ) : (
             <>
               <TextInput
                 style={[styles.input, { borderWidth: 1, borderColor: '#ccc', backgroundColor: '#fff' }]}
-                placeholder="Código de Verificação"
+                placeholder={t('Código de Verificação')}
                 value={code}
                 onChangeText={setCode}
                 keyboardType="number-pad"
@@ -191,7 +184,7 @@ export default function ChangePasswordScreen() {
               />
 
               <TouchableOpacity style={styles.button} onPress={handleFinalizeChange} disabled={isLoading}>
-                {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Confirmar</Text>}
+                {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('Confirmar')}</Text>}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -199,7 +192,7 @@ export default function ChangePasswordScreen() {
                 onPress={() => setStep('start')}
                 disabled={isLoading}
               >
-                <Text style={[styles.buttonText, { color: '#374151' }]}>Voltar</Text>
+                <Text style={[styles.buttonText, { color: '#374151' }]}>{t('Voltar')}</Text>
               </TouchableOpacity>
             </>
           )}

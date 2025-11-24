@@ -26,6 +26,9 @@ const MOCK_PROPERTIES: Property[] = [
     { id: '3', name: 'Chácara do Sol', address: 'Estrada da colina, 789', registrationNumber: 'CAR-11223' },
 ];
 
+import '../../utils/i18n';
+import { useTranslation } from 'react-i18next';
+
 // componente reutilizável para o cartão de propriedade
 type PropertyCardProps = {
     property: Property;
@@ -34,13 +37,17 @@ type PropertyCardProps = {
 };
 
 const PropertyCard: React.FC<PropertyCardProps> = ({ property, onGenerate, isLoading }) => {
+    const { t } = useTranslation();
+
     return (
         <View style={styles.card}>
             <Ionicons name = "business-outline" size={40} color="#007BFF" style={styles.cardIcon} />
             <View style = {styles.cardInfo}>
                 <Text style={styles.cardTitle}>{property.name}</Text>
                 <Text style={styles.cardAddress}>{property.address}</Text>
-                <Text style={styles.cardRegistration}>Matrícula: {property.registrationNumber}</Text>
+                <Text style={styles.cardRegistration}>
+                  {t('Matrícula: {{reg}}', { reg: property.registrationNumber })}
+                </Text>
             </View>
             <TouchableOpacity
                 style={[styles.button, isLoading ? styles.buttonDisabled : null]}
@@ -52,7 +59,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, onGenerate, isLoa
                 ) : (
                     <>
                     <Ionicons name="download-outline" size={20} color="white" />
-                    <Text style={styles.buttonText}>Gerar Certificado</Text>
+                    <Text style={styles.buttonText}>{t('Gerar Certificado')}</Text>
                     </>
                 )}
             </TouchableOpacity>
@@ -62,6 +69,8 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, onGenerate, isLoa
 
 // componente principal da página
 export default function CertificadosScreen() {
+    const { t } = useTranslation();
+
     //estado para controlar qual propriedadeestá a gerar o PDF
     const [loadingProperty, setLoadingProperty] = useState<string | null>(null);
 
@@ -70,16 +79,16 @@ export default function CertificadosScreen() {
         setLoadingProperty(property.id);
 
         Alert.alert(
-            'A gerar certificado...',
-            `Aguarde um momento enquanto preparamos o documento para "${property.name}".`
+            t('A gerar certificado...'),
+            t('Aguarde um momento enquanto preparamos o documento para "{{name}}".', { name: property.name })
         );
 
         // simula uma chamada de API ou processo de geração
         setTimeout(() => {
             setLoadingProperty(null);
             Alert.alert(
-                'Certificado Pronto!',
-                `O certificado para "${property.name}" foi gerado.\n\n(Aqui, a app iria abrir ou partilhar o PDF)`
+                t('Certificado Pronto!'),
+                t('O certificado para "{{name}}" foi gerado.\n\n(Aqui, a app iria abrir ou partilhar o PDF)', { name: property.name })
             );
             //
             // TODO:substituir esta simulação pela lógica real de geração de PDF com a biblioteca 'expo-print'
@@ -90,9 +99,9 @@ export default function CertificadosScreen() {
     return (
         <SafeAreaView style={styles.safeArea}>
             <ScrollView contentContainerStyle={styles.container}>
-                <Text style={styles.title}>Emissão de certificados</Text>
+                <Text style={styles.title}>{t('Emissão de certificados')}</Text>
                 <Text style={styles.description}>
-                    Selecione uma propriedade para gerar o certificado digital em formato PDF.
+                    {t('Selecione uma propriedade para gerar o certificado digital em formato PDF.')}
                 </Text>
 
                 <View style={styles.listContainer}>

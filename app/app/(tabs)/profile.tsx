@@ -17,6 +17,9 @@ import {
 import MaskInput from "react-native-mask-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import '../../utils/i18n';
+import { useTranslation } from 'react-i18next';
+
 interface UserData {
     name: string;
     phone: string;
@@ -29,6 +32,7 @@ const phoneMask = ['(', /\d/, /\d/, ')', ' ', /\d/, /\d/, /\d/, /\d/, /\d/, '-',
 
 export default function ProfileScreen() {
     const router = useRouter();
+    const { t } = useTranslation();
 
     const [isEditing, setIsEditing] = useState(false);
     
@@ -48,25 +52,24 @@ export default function ProfileScreen() {
     };
 
     const handleSave = () => {
-        //lógica de API para salvar os dados viria aqui
-        //ex: await api.updateUser(tempUserData);
+        // lógica de API para salvar os dados viria aqui
+        // ex: await api.updateUser(tempUserData);
         setUserData(tempUserData);
         setIsEditing(false);
-        Alert.alert("Sucesso", "Dados salvos com sucesso!");
+        Alert.alert(t('Sucesso'), t('Dados salvos com sucesso!'));
     };
 
     const handleCancel = () => {
         setIsEditing(false);
     };
 
-    //navega para tela de alteração de senha usando o expo router
+    // navega para tela de alteração de senha usando o expo router
     const handleChangePassword = () => {
-        //router.push levará o usuário para a rota '/change-password'
-        //preciso criar o arquivo app/change-password.tsx para essa rota funcionar
+        // router.push levará o usuário para a rota '/change-password'
         router.push("/Alterar_senha");
     };
 
-    //função para atualizar o estado temporario
+    // função para atualizar o estado temporario
     const handleInputChange = (field: keyof UserData, value: string) => {
         setTempUserData(prevState => ({
             ...prevState,
@@ -78,14 +81,14 @@ export default function ProfileScreen() {
         // pedir permissão para acessar a galeria
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permissão negada', 'Precisamos de permissão para acessar suas fotos.');
+            Alert.alert(t('Permissão negada'), t('Precisamos de permissão para acessar suas fotos.'));
             return;
         }
         // abrir a galeria para selecionar uma imagem
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true, //permite recorte da imagem
-            aspect: [1, 1], //
+            allowsEditing: true, // permite recorte da imagem
+            aspect: [1, 1],
             quality: 1,
         });
         if (!result.canceled) {
@@ -113,27 +116,26 @@ export default function ProfileScreen() {
                     )}
                 </View>
                     
+                <Text style={styles.title}>{t('Perfil do Usuário')}</Text>
 
-                <Text style={styles.title}>Perfil do Usuário</Text>
-
-                {/*campo nome*/}
+                {/* campo nome */}
                 <View style={styles.fieldContainer}>
-                    <Text style={styles.label}>Nome Completo</Text>
+                    <Text style={styles.label}>{t('Nome Completo')}</Text>
                     {isEditing ? (
                         <TextInput
                             style={styles.input}
                             value={tempUserData.name}
                             onChangeText={(text) => handleInputChange("name", text)}
-                            placeholder="Seu nome completo"
+                            placeholder={t('Seu nome completo')}
                         />
                     ) : (
                         <Text style={styles.value}>{userData.name}</Text>
                     )}
                 </View>
 
-                {/*campo telefone*/}
+                {/* campo telefone */}
                 <View style={styles.fieldContainer}>
-                    <Text style={styles.label}>Telefone</Text>
+                    <Text style={styles.label}>{t('Telefone')}</Text>
                     {isEditing ? (
                         <MaskInput
                             style={styles.input}
@@ -143,7 +145,7 @@ export default function ProfileScreen() {
                             }}
                             mask={phoneMask}
                             keyboardType="phone-pad"
-                            placeholder="(99) 9999-9999"
+                            placeholder={t('(99) 9999-9999')}
                         />
                     ) : (
                         <Text style={styles.value}>{userData.phone}</Text>
@@ -152,13 +154,13 @@ export default function ProfileScreen() {
 
                 {/* Campo Endereço */}
                 <View style={styles.fieldContainer}>
-                    <Text style={styles.label}>Endereço</Text>
+                    <Text style={styles.label}>{t('Endereço')}</Text>
                     {isEditing ? (
                         <TextInput
                             style={styles.input}
                             value={tempUserData.address}
                             onChangeText={(text) => handleInputChange('address', text)}
-                            placeholder="Seu endereço completo"
+                            placeholder={t('Seu endereço completo')}
                             multiline
                         />
                     ) : (
@@ -168,13 +170,13 @@ export default function ProfileScreen() {
 
                 {/* Campo E-mail */}
                 <View style={styles.fieldContainer}>
-                    <Text style={styles.label}>E-mail</Text>
+                    <Text style={styles.label}>{t('E-mail')}</Text>
                     {isEditing ? (
                         <TextInput
                             style={styles.input}
                             value={tempUserData.email}
                             onChangeText={(text) => handleInputChange('email', text)}
-                            placeholder="seuemail@exemplo.com"
+                            placeholder={t('seuemail@exemplo.com')}
                             keyboardType="email-address"
                             autoCapitalize="none"
                         />
@@ -188,19 +190,19 @@ export default function ProfileScreen() {
                     {isEditing ? (
                         <>
                             <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSave}>
-                                <Text style={styles.buttonText}>Salvar</Text>
+                                <Text style={styles.buttonText}>{t('Salvar')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancel}>
-                                <Text style={styles.buttonText}>Cancelar</Text>
+                                <Text style={styles.buttonText}>{t('Cancelar')}</Text>
                             </TouchableOpacity>
                         </>
                     ) : (
                         <>
                             <TouchableOpacity style={[styles.button, styles.editButton]} onPress={handleEdit}>
-                                <Text style={styles.buttonText}>Editar Perfil</Text>
+                                <Text style={styles.buttonText}>{t('Editar Perfil')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={[styles.button, styles.passwordButton]} onPress={handleChangePassword}>
-                                <Text style={styles.buttonText}>Alterar Senha</Text>
+                                <Text style={styles.buttonText}>{t('Alterar Senha')}</Text>
                             </TouchableOpacity>
                         </>
                     )}

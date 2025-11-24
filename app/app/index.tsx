@@ -6,10 +6,15 @@ import * as SecureStore from 'expo-secure-store';
 import { api } from '@/lib/api'; // seu helper que já injeta o Authorization
 import { saveProfile, MeResponse } from '@/lib/session';
 
+import '../utils/i18n';
+import { useTranslation } from 'react-i18next';
+
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL!;
 
 export default function LandingScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
+
   const [loadingGuest, setLoadingGuest] = React.useState(false);
 
   async function handleGuestLogin() {
@@ -23,8 +28,8 @@ export default function LandingScreen() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || 'Falha ao entrar como visitante.');
-      if (!data?.token) throw new Error('Token não retornado pelo servidor.');
+      if (!res.ok) throw new Error(data?.error || data?.message || t('Falha ao entrar como visitante.'));
+      if (!data?.token) throw new Error(t('Token não retornado pelo servidor.'));
 
       // 2️⃣ Armazena o token
       await SecureStore.setItemAsync('access_token', data.token);
@@ -36,7 +41,7 @@ export default function LandingScreen() {
       // 4️⃣ Vai para a tela principal
       router.replace('/(tabs)/mapa');
     } catch (err: any) {
-      Alert.alert('Erro', err?.message || 'Falha ao entrar como visitante.');
+      Alert.alert(t('Erro'), err?.message || t('Falha ao entrar como visitante.'));
     } finally {
       setLoadingGuest(false);
     }
@@ -53,8 +58,8 @@ export default function LandingScreen() {
           />
         </View>
 
-        <Text style={styles.title}>Bem-vindo</Text>
-        <Text style={styles.subtitle}>Escolha como deseja acessar</Text>
+        <Text style={styles.title}>{t('Bem-vindo')}</Text>
+        <Text style={styles.subtitle}>{t('Escolha como deseja acessar')}</Text>
 
         <View style={styles.buttons}>
           <TouchableOpacity
@@ -65,7 +70,7 @@ export default function LandingScreen() {
             {loadingGuest ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Acessar como visitante</Text>
+              <Text style={styles.buttonText}>{t('Acessar como visitante')}</Text>
             )}
           </TouchableOpacity>
 
@@ -73,14 +78,14 @@ export default function LandingScreen() {
             style={[styles.button, styles.buttonOutline]}
             onPress={() => router.push('/login')}
           >
-            <Text style={[styles.buttonText, styles.buttonTextOutline]}>Fazer login</Text>
+            <Text style={[styles.buttonText, styles.buttonTextOutline]}>{t('Fazer login')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.button, styles.buttonGhost]}
             onPress={() => router.push('/register')}
           >
-            <Text style={[styles.buttonText, styles.buttonTextGhost]}>Realizar cadastro</Text>
+            <Text style={[styles.buttonText, styles.buttonTextGhost]}>{t('Realizar cadastro')}</Text>
           </TouchableOpacity>
         </View>
       </View>

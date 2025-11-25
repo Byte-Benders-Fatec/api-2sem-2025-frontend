@@ -38,6 +38,10 @@ export interface PropertyWithMongoDetails extends UserProperty {
       plus_code?: {
         global_code: string;
         compound_code: string;
+        coordinates?: {
+          latitude: number;
+          longitude: number;
+        };
       };
     };
     center?: {

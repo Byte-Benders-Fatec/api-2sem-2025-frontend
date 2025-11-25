@@ -31,12 +31,13 @@ interface Certificate {
 // componente reutilizável para o cartão de certificado
 type CertificateCardProps = {
   certificate: Certificate;
+  onView: () => void;
   onDownload: () => void;
   onDelete: () => void;
   isDeleting: boolean;
 };
 
-const CertificateCard: React.FC<CertificateCardProps> = ({ certificate, onDownload, onDelete, isDeleting }) => {
+const CertificateCard: React.FC<CertificateCardProps> = ({ certificate, onView, onDownload, onDelete, isDeleting }) => {
   const formattedDate = new Date(certificate.issue_date).toLocaleDateString('pt-BR');
 
   return (
@@ -59,11 +60,19 @@ const CertificateCard: React.FC<CertificateCardProps> = ({ certificate, onDownlo
 
       <View style={styles.actionsContainer}>
         <TouchableOpacity
+          style={[styles.actionButton, styles.viewButton]}
+          onPress={onView}
+        >
+          <Ionicons name="eye-outline" size={20} color="#fff" />
+          <Text style={styles.buttonText}>Ver</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.actionButton, styles.downloadButton]}
           onPress={onDownload}
         >
-          <Ionicons name="eye-outline" size={20} color="#fff" />
-          <Text style={styles.buttonText}>Visualizar PDF</Text>
+          <Ionicons name="download-outline" size={20} color="#fff" />
+          <Text style={styles.buttonText}>Baixar</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -112,13 +121,23 @@ export default function CertificadosScreen() {
     fetchCertificates();
   };
 
-  const handleDownload = async (cert: Certificate) => {
+  const handleView = async (cert: Certificate) => {
     try {
       const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000/api/v1';
       const pdfUrl = `${baseUrl}/documents/${cert.document_id}/view`;
       await Linking.openURL(pdfUrl);
     } catch (error) {
       Alert.alert("Erro", "Não foi possível abrir o certificado.");
+    }
+  };
+
+  const handleDownload = async (cert: Certificate) => {
+    try {
+      const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000/api/v1';
+      const pdfUrl = `${baseUrl}/documents/${cert.document_id}/download`;
+      await Linking.openURL(pdfUrl);
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível baixar o certificado.");
     }
   };
 
@@ -172,6 +191,7 @@ export default function CertificadosScreen() {
                 <CertificateCard
                   key={cert.id}
                   certificate={cert}
+                  onView={() => handleView(cert)}
                   onDownload={() => handleDownload(cert)}
                   onDelete={() => handleDelete(cert)}
                   isDeleting={deletingId === cert.id}
@@ -261,31 +281,35 @@ const styles = StyleSheet.create({
   actionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 10,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 15,
+    paddingHorizontal: 10,
     borderRadius: 8,
     flex: 1,
   },
+  viewButton: {
+    backgroundColor: '#28a745',
+  },
   downloadButton: {
     backgroundColor: '#007BFF',
-    marginRight: 10,
   },
   deleteButton: {
     backgroundColor: '#FF3B30',
-    maxWidth: 60,
+    maxWidth: 50,
+    flex: 0.5,
   },
   disabledButton: {
     opacity: 0.7,
   },
   buttonText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
-    marginLeft: 8,
+    marginLeft: 5,
   },
 });

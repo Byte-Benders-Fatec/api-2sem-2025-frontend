@@ -222,6 +222,9 @@ const AppMapView = ({
         longitude: selected.lng,
       });
       Alert.alert('Plus Code criado', 'O Plus Code foi gerado e associado ao imóvel.');
+
+      // Limpa os parâmetros para sair do modo Plus Code
+      router.setParams({ mode: '', propertyId: '' });
       router.replace('/(tabs)/propriedades'); // volta para a lista
     } catch (err: any) {
       console.error('submit plus-code error:', err);
@@ -298,13 +301,23 @@ const AppMapView = ({
             </Text>
 
             <View style={styles.panelButtons}>
-              <TouchableOpacity style={styles.btnCancel} onPress={() => router.back()} disabled={isSubmitting}>
+              <TouchableOpacity
+                style={styles.btnCancel}
+                onPress={() => {
+                  router.setParams({ mode: '', propertyId: '' });
+                  router.replace('/(tabs)/propriedades');
+                }}
+                disabled={isSubmitting}
+              >
                 <Text style={styles.btnCancelText}>Cancelar</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.btnConfirm, !selected && { opacity: 0.6 }]}
-                onPress={handleConfirmSelection}
+                onPress={async () => {
+                  await handleConfirmSelection();
+                  router.setParams({ mode: '', propertyId: '' });
+                }}
                 disabled={!selected || isSubmitting}
               >
                 <Text style={styles.btnConfirmText}>Confirmar local</Text>

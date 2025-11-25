@@ -22,6 +22,7 @@ import {
   UserProperty
 } from '@/services/userProperties';
 import { loadProfile } from '@/lib/session';
+import * as api from '@/lib/api';
 
 interface PropertyDisplay {
   id: number;
@@ -42,9 +43,10 @@ type PropertyCardProps = {
   onCreatePlusCode: () => void;
   onDelete: () => void;
   onEditName: () => void;
+  onGenerateCertificate: () => void;
 };
 
-const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewOnMap, onCreatePlusCode, onDelete, onEditName }) => {
+const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewOnMap, onCreatePlusCode, onDelete, onEditName, onGenerateCertificate }) => {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -54,8 +56,11 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewOnMap, onCr
           color={property.type === 'Rural' ? '#28a745' : '#007bff'}
         />
         <Text style={styles.cardTitle}>{property.name}</Text>
-        <TouchableOpacity onPress={onEditName}>
+        <TouchableOpacity onPress={onEditName} style={{ marginRight: 10 }}>
           <Ionicons name="pencil-outline" size={20} color="#666" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onGenerateCertificate}>
+          <Ionicons name="document-text-outline" size={24} color="#007BFF" />
         </TouchableOpacity>
       </View>
 
@@ -64,7 +69,6 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, onViewOnMap, onCr
           <Text style={styles.infoLabel}>Matrícula:</Text> {property.registryNumber}
         </Text>
 
-        {/* Novos Campos */}
         {property.municipio && (
           <Text style={styles.infoText}>
             <Text style={styles.infoLabel}>Local:</Text> {property.municipio} - {property.cod_estado}
@@ -370,6 +374,39 @@ export default function PropriedadesScreen() {
     }
   };
 
+  const handleGenerateCertificate = async (property: PropertyDisplay) => {
+    try {
+      Alert.alert('Gerando Certificado', 'Aguarde enquanto geramos o certificado...');
+
+      // Fetch details from Mongo to pass to backend
+      const details = await getPropertyMongoDetails(property.id);
+
+      const propertyData = {
+        municipio: property.municipio,
+        cod_estado: property.cod_estado,
+        area: property.area,
+        perimeter: property.perimeter,
+        plusCode: property.plusCode,
+        display_name: property.name,
+      };
+
+      const response = await api.postJson<any>('/certificate/generate', {
+        propertyId: property.id,
+        propertyData
+      });
+
+      if (response.success && response.url) {
+        Alert.alert('Sucesso', 'Certificado gerado com sucesso! Você pode visualizá-lo na aba Certificados.');
+      } else {
+        Alert.alert('Erro', 'Falha ao gerar certificado.');
+      }
+
+    } catch (error) {
+      console.error('Erro ao gerar certificado:', error);
+      Alert.alert('Erro', 'Não foi possível gerar o certificado.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -412,6 +449,7 @@ export default function PropriedadesScreen() {
                   onCreatePlusCode={() => handleCreatePlusCode(prop.id)}
                   onDelete={() => handleDeleteProperty(prop.id, prop.name)}
                   onEditName={() => handleEditName(prop)}
+                  onGenerateCertificate={() => handleGenerateCertificate(prop)}
                 />
               ))
             ) : (
@@ -515,8 +553,8 @@ const styles = StyleSheet.create({
   infoLabel: { fontWeight: 'bold', color: '#555' },
   infoText: { fontSize: 16, color: '#666', marginBottom: 5 },
   rowInfo: { flexDirection: 'row', marginTop: 5 },
-  cardActions: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee' },
-  actionButton: { flexDirection: 'row', alignItems: 'center' },
+  cardActions: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10, borderTopWidth: 1, borderTopColor: '#eee', flexWrap: 'wrap' },
+  actionButton: { flexDirection: 'row', alignItems: 'center', marginVertical: 5 },
   actionButtonText: { fontSize: 14, marginLeft: 5, color: '#007BFF', fontWeight: 'bold' },
   emptyListText: { textAlign: 'center', fontSize: 16, color: '#888', marginTop: 40 },
 

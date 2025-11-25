@@ -1,116 +1,190 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
-  ActivityIndicator, // indicador de carregamento
+  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  RefreshControl,
+  Linking
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
+import { getJson, deleteJson } from "@/lib/api";
 
-// dados fictícios (MOCK_DATA)
-// dados a virem da base de dados ou API
-interface Property {
-    id: string;
-    name: string;
-    address: string;
-    registrationNumber: string; //número de matrícula ou registro
+interface Certificate {
+  id: string;
+  number: string;
+  issue_date: string;
+  expiry_date: string;
+  status: string;
+  property_name: string;
+  registry_number: string;
+  municipio?: string;
+  cod_estado?: string;
+  document_id: string;
 }
 
-const MOCK_PROPERTIES: Property[] = [
-    { id: '1', name: 'Sítio Recando Verde', address: 'Rua das Flores, 123, Zona rural', registrationNumber: 'CAR-12345' },
-    { id: '2', name: 'Fazenda Água Clara', address: 'Rodovia BR-101, Km 50', registrationNumber: 'CAR-67890' },
-    { id: '3', name: 'Chácara do Sol', address: 'Estrada da colina, 789', registrationNumber: 'CAR-11223' },
-];
-
-// componente reutilizável para o cartão de propriedade
-type PropertyCardProps = {
-    property: Property;
-    onGenerate: () => void;
-    isLoading: boolean;
+// componente reutilizável para o cartão de certificado
+type CertificateCardProps = {
+  certificate: Certificate;
+  onDownload: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
 };
 
-const PropertyCard: React.FC<PropertyCardProps> = ({ property, onGenerate, isLoading }) => {
-    return (
-        <View style={styles.card}>
-            <Ionicons name = "business-outline" size={40} color="#007BFF" style={styles.cardIcon} />
-            <View style = {styles.cardInfo}>
-                <Text style={styles.cardTitle}>{property.name}</Text>
-                <Text style={styles.cardAddress}>{property.address}</Text>
-                <Text style={styles.cardRegistration}>Matrícula: {property.registrationNumber}</Text>
-            </View>
-            <TouchableOpacity
-                style={[styles.button, isLoading ? styles.buttonDisabled : null]}
-                onPress={onGenerate}
-                disabled={isLoading}
-            >
-                {isLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                    <>
-                    <Ionicons name="download-outline" size={20} color="white" />
-                    <Text style={styles.buttonText}>Gerar Certificado</Text>
-                    </>
-                )}
-            </TouchableOpacity>
+const CertificateCard: React.FC<CertificateCardProps> = ({ certificate, onDownload, onDelete, isDeleting }) => {
+  const formattedDate = new Date(certificate.issue_date).toLocaleDateString('pt-BR');
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Ionicons name="ribbon-outline" size={32} color="#007BFF" />
+        <View style={styles.headerText}>
+          <Text style={styles.cardTitle}>{certificate.property_name}</Text>
+          <Text style={styles.cardSubtitle}>
+            {certificate.municipio ? `${certificate.municipio} - ` : ''}{certificate.cod_estado || ''}
+          </Text>
         </View>
-    );
+      </View>
+
+      <View style={styles.cardInfo}>
+        <Text style={styles.infoText}>Matrícula: <Text style={styles.bold}>{certificate.registry_number}</Text></Text>
+        <Text style={styles.infoText}>Emitido em: <Text style={styles.bold}>{formattedDate}</Text></Text>
+        <Text style={styles.infoText}>Número: <Text style={styles.bold}>{certificate.number}</Text></Text>
+      </View>
+
+      <View style={styles.actionsContainer}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.downloadButton]}
+          onPress={onDownload}
+        >
+          <Ionicons name="eye-outline" size={20} color="#fff" />
+          <Text style={styles.buttonText}>Visualizar PDF</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionButton, styles.deleteButton, isDeleting && styles.disabledButton]}
+          onPress={onDelete}
+          disabled={isDeleting}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="trash-outline" size={20} color="#fff" />
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 };
 
-// componente principal da página
 export default function CertificadosScreen() {
-    //estado para controlar qual propriedadeestá a gerar o PDF
-    const [loadingProperty, setLoadingProperty] = useState<string | null>(null);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    //função para simular a geração do certificado
-    const handGeneratorPDF = (property: Property) => {
-        setLoadingProperty(property.id);
+  const fetchCertificates = async () => {
+    try {
+      const data = await getJson<Certificate[]>('/certificate/list');
+      setCertificates(data);
+    } catch (error) {
+      console.error("Erro ao buscar certificados:", error);
+      Alert.alert("Erro", "Não foi possível carregar os certificados.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
-        Alert.alert(
-            'A gerar certificado...',
-            `Aguarde um momento enquanto preparamos o documento para "${property.name}".`
-        );
+  useFocusEffect(
+    useCallback(() => {
+      fetchCertificates();
+    }, [])
+  );
 
-        // simula uma chamada de API ou processo de geração
-        setTimeout(() => {
-            setLoadingProperty(null);
-            Alert.alert(
-                'Certificado Pronto!',
-                `O certificado para "${property.name}" foi gerado.\n\n(Aqui, a app iria abrir ou partilhar o PDF)`
-            );
-            //
-            // TODO:substituir esta simulação pela lógica real de geração de PDF com a biblioteca 'expo-print'
-            //
-        }, 3000); // simula um atraso de 3 segundos
-    };
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchCertificates();
+  };
 
-    return (
-        <SafeAreaView style={styles.safeArea}>
-            <ScrollView contentContainerStyle={styles.container}>
-                <Text style={styles.title}>Emissão de certificados</Text>
-                <Text style={styles.description}>
-                    Selecione uma propriedade para gerar o certificado digital em formato PDF.
-                </Text>
+  const handleDownload = async (cert: Certificate) => {
+    try {
+      const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000/api/v1';
+      const pdfUrl = `${baseUrl}/documents/${cert.document_id}/view`;
+      await Linking.openURL(pdfUrl);
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível abrir o certificado.");
+    }
+  };
 
-                <View style={styles.listContainer}>
-                    {MOCK_PROPERTIES.map((prop) => (
-                        <PropertyCard
-                            key={prop.id}
-                            property={prop}
-                            onGenerate={() => handGeneratorPDF(prop)}
-                            isLoading={loadingProperty === prop.id}
-                        />
-                    ))}
-                </View>
-            </ScrollView>
-        </SafeAreaView>
+  const handleDelete = (cert: Certificate) => {
+    Alert.alert(
+      "Excluir Certificado",
+      `Tem certeza que deseja excluir o certificado de "${cert.property_name}"?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingId(cert.id);
+            try {
+              await deleteJson(`/certificate/${cert.id}`);
+              setCertificates(prev => prev.filter(c => c.id !== cert.id));
+              Alert.alert("Sucesso", "Certificado excluído com sucesso.");
+            } catch (error) {
+              Alert.alert("Erro", "Não foi possível excluir o certificado.");
+            } finally {
+              setDeletingId(null);
+            }
+          }
+        }
+      ]
     );
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <Text style={styles.title}>Meus Certificados</Text>
+        <Text style={styles.description}>
+          Gerencie seus certificados de propriedade emitidos pelo Rural CAR.
+        </Text>
+
+        {loading ? (
+          <ActivityIndicator size="large" color="#007BFF" style={{ marginTop: 50 }} />
+        ) : (
+          <View style={styles.listContainer}>
+            {certificates.length === 0 ? (
+              <Text style={styles.emptyText}>Nenhum certificado encontrado.</Text>
+            ) : (
+              certificates.map((cert) => (
+                <CertificateCard
+                  key={cert.id}
+                  certificate={cert}
+                  onDownload={() => handleDownload(cert)}
+                  onDelete={() => handleDelete(cert)}
+                  isDeleting={deletingId === cert.id}
+                />
+              ))
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
-// estilos da página
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -118,7 +192,7 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 20,
-    paddingBottom: 120, // Espaço extra no final para a TabBar flutuante não tapar o conteúdo
+    paddingBottom: 120,
   },
   title: {
     fontSize: 28,
@@ -134,58 +208,84 @@ const styles = StyleSheet.create({
   listContainer: {
     width: '100%',
   },
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 16,
+    marginTop: 50,
+  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 20,
+    padding: 15,
     marginBottom: 15,
     shadowColor: '#000',
     shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
-  cardIcon: {
-    alignSelf: 'center',
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingBottom: 10,
   },
-  cardInfo: {
-    marginBottom: 20,
+  headerText: {
+    marginLeft: 10,
+    flex: 1,
   },
   cardTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    textAlign: 'center',
-    marginBottom: 5,
   },
-  cardAddress: {
-    fontSize: 16,
-    color: '#555',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  cardRegistration: {
+  cardSubtitle: {
     fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
-    fontStyle: 'italic',
+    color: '#666',
   },
-  button: {
+  cardInfo: {
+    marginBottom: 15,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 4,
+  },
+  bold: {
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007BFF',
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
     borderRadius: 8,
+    flex: 1,
   },
-  buttonDisabled: {
-    backgroundColor: '#a0cfff',
+  downloadButton: {
+    backgroundColor: '#007BFF',
+    marginRight: 10,
+  },
+  deleteButton: {
+    backgroundColor: '#FF3B30',
+    maxWidth: 60,
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   buttonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginLeft: 10,
+    marginLeft: 8,
   },
 });

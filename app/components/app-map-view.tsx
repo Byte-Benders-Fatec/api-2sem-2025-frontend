@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Alert, StyleSheet, Text, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
+import { View, Alert, StyleSheet, Text, TouchableOpacity, ActivityIndicator, TextInput, Keyboard, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Polygon, Region, Marker, Callout, Polyline } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import * as api from '@/lib/api';
 import { fetchImoveisViewport, createImovelPlusCode } from '../lib/geoApi';
 import SearchPlaces from './SearchPlaces';
+import RouteInput from './RouteInput';
 
 interface Property {
   _id: string;
@@ -91,6 +92,12 @@ async function findPlaceByText(text: string, opts?: { region?: string; locationB
 }
 
 async function resolveTextToLatLng(text: string, opts?: { region?: string; locationBiasPoint?: { lat: number; lng: number } }): Promise<LatLng | null> {
+  // Check for "lat, lng" format
+  if (/^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(text.trim())) {
+    const [lat, lng] = text.split(',').map(Number);
+    return { lat, lng, description: text };
+  }
+
   if (isPlusCode(text)) {
     const byGeo = await geocodeByAddress(text, { region: opts?.region ?? 'br' });
     if (byGeo) return byGeo;
@@ -136,7 +143,26 @@ const AppMapView = ({
   const [originText, setOriginText] = useState('');
   const [destText, setDestText] = useState('');
   const [routeCoordinates, setRouteCoordinates] = useState<LatLng[]>([]);
+
   const [isRouting, setIsRouting] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardOffset(e.endCoordinates.height);
+    });
+    const onHide = Keyboard.addListener(hideEvent, () => {
+      setKeyboardOffset(0);
+    });
+
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
 
   // Helper to decode polyline
   function decodePolyline(t: string) {
@@ -459,7 +485,7 @@ const AppMapView = ({
       {
         routeMode && (
           <View pointerEvents="box-none" style={styles.overlayTouchableArea}>
-            <View style={[styles.bottomPanel, { bottom: (insets?.bottom ?? 0) + 84, paddingHorizontal: 10 }]}>
+            <View style={[styles.bottomPanel, { bottom: (insets?.bottom ?? 0) + 84 + (keyboardOffset > 0 ? keyboardOffset - 80 : 0), paddingHorizontal: 10 }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <Text style={styles.panelTitle}>Traçar Rota</Text>
                 <TouchableOpacity onPress={() => { setRouteMode(false); setRouteCoordinates([]); }}>
@@ -468,13 +494,13 @@ const AppMapView = ({
               </View>
 
               <View style={{ gap: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, zIndex: 20 }}>
                   <Ionicons name="location" size={20} color="#28a745" />
-                  <TextInput
-                    style={styles.input}
+                  <RouteInput
                     placeholder="Origem"
                     value={originText}
                     onChangeText={setOriginText}
+                    onPlaceSelected={(p) => setOriginText(p.description)}
                   />
                   <TouchableOpacity onPress={() => setOriginText('Minha Localização')}>
                     <Ionicons name="locate" size={24} color="#007BFF" />
@@ -487,13 +513,13 @@ const AppMapView = ({
                   </TouchableOpacity>
                 </View>
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, zIndex: 10 }}>
                   <Ionicons name="flag" size={20} color="#FF3B30" />
-                  <TextInput
-                    style={styles.input}
+                  <RouteInput
                     placeholder="Destino"
                     value={destText}
                     onChangeText={setDestText}
+                    onPlaceSelected={(p) => setDestText(p.description)}
                   />
                   <TouchableOpacity onPress={() => setDestText('Minha Localização')}>
                     <Ionicons name="locate" size={24} color="#007BFF" />

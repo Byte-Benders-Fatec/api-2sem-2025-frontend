@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Alert, StyleSheet, Text, TouchableOpacity, ActivityIndicator, TextInput, Keyboard, Platform } from 'react-native';
+import { View, Alert, StyleSheet, Text, TouchableOpacity, ActivityIndicator, TextInput, Keyboard, Platform, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Polygon, Region, Marker, Callout, Polyline } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -143,6 +143,7 @@ const AppMapView = ({
   const [originText, setOriginText] = useState('');
   const [destText, setDestText] = useState('');
   const [routeCoordinates, setRouteCoordinates] = useState<LatLng[]>([]);
+  const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
 
   const [isRouting, setIsRouting] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -226,8 +227,16 @@ const AppMapView = ({
       const json = await res.json();
 
       if (json.status === 'OK' && json.routes.length > 0) {
-        const points = decodePolyline(json.routes[0].overview_polyline.points);
+        const route = json.routes[0];
+        const points = decodePolyline(route.overview_polyline.points);
         setRouteCoordinates(points);
+
+        if (route.legs && route.legs.length > 0) {
+          setRouteInfo({
+            distance: route.legs[0].distance.text,
+            duration: route.legs[0].duration.text,
+          });
+        }
 
         // Fit map to route
         const allPoints = points.map(p => ({ latitude: p.lat, longitude: p.lng }));
@@ -380,6 +389,8 @@ const AppMapView = ({
             </Marker>
             {/* Destination Marker (Red Pin) */}
             <Marker coordinate={{ latitude: routeCoordinates[routeCoordinates.length - 1].lat, longitude: routeCoordinates[routeCoordinates.length - 1].lng }} />
+
+
           </>
         )}
         {Array.isArray(properties) && properties.map((property, index) => (
@@ -496,7 +507,7 @@ const AppMapView = ({
             <View style={[styles.bottomPanel, { bottom: (insets?.bottom ?? 0) + 84 + (keyboardOffset > 0 ? keyboardOffset - 80 : 0), paddingHorizontal: 10 }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <Text style={styles.panelTitle}>Traçar Rota</Text>
-                <TouchableOpacity onPress={() => { setRouteMode(false); setRouteCoordinates([]); }}>
+                <TouchableOpacity onPress={() => { setRouteMode(false); setRouteCoordinates([]); setRouteInfo(null); }}>
                   <Ionicons name="close-circle" size={24} color="#fff" />
                 </TouchableOpacity>
               </View>
@@ -541,6 +552,35 @@ const AppMapView = ({
                 >
                   {isRouting ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnConfirmText}>Calcular Rota</Text>}
                 </TouchableOpacity>
+
+                {routeInfo && (
+                  <View style={styles.modalInfoContainer}>
+                    <View style={styles.modalInfoItem}>
+                      <Ionicons name="time-outline" size={20} color="#333" />
+                      <Text style={styles.modalInfoText}>{routeInfo.duration}</Text>
+                    </View>
+                    <View style={styles.modalInfoDivider} />
+                    <View style={styles.modalInfoItem}>
+                      <Ionicons name="resize-outline" size={20} color="#333" />
+                      <Text style={styles.modalInfoText}>{routeInfo.distance}</Text>
+                    </View>
+                  </View>
+                )}
+
+                {routeCoordinates.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.btnConfirm, { backgroundColor: '#4285F4', marginTop: 8, flexDirection: 'row', justifyContent: 'center', gap: 8 }]}
+                    onPress={() => {
+                      const origin = originText === 'Minha Localização' ? '' : originText;
+                      const dest = destText;
+                      const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&travelmode=driving`;
+                      Linking.openURL(url);
+                    }}
+                  >
+                    <Ionicons name="map" size={20} color="#fff" />
+                    <Text style={styles.btnConfirmText}>Abrir no Maps</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </View>
@@ -608,6 +648,57 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 8,
     fontSize: 14,
+  },
+  routeInfoBubble: {
+    backgroundColor: '#fff',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    alignItems: 'center',
+    minWidth: 120,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  routeInfoText: {
+    fontWeight: '800',
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 2,
+  },
+  routeInfoSubText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  modalInfoContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  modalInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modalInfoText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  modalInfoDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#ccc',
   },
 });
 

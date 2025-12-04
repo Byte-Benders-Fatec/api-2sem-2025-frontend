@@ -3,9 +3,9 @@ import type { ExpoConfig } from '@expo/config';
 import { api } from './lib/api';
 
 const config: ExpoConfig = {
-  name: 'maps-V3',
-  slug: 'maps-V3',
-  version: '1.0.0',
+  name: 'Rural CAR',
+  slug: 'rural-car',
+  version: '3.1.0',
   extra: {
     apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL,
     apiGeoBaseUrl: process.env.EXPO_PUBLIC_GEO_API_BASE_URL,

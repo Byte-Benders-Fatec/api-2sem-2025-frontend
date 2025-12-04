@@ -368,11 +368,19 @@ const AppMapView = ({
         mapType="standard"
       >
         {routeCoordinates.length > 0 && (
-          <Polyline
-            coordinates={routeCoordinates.map(c => ({ latitude: c.lat, longitude: c.lng }))}
-            strokeColor="#007BFF"
-            strokeWidth={4}
-          />
+          <>
+            <Polyline
+              coordinates={routeCoordinates.map(c => ({ latitude: c.lat, longitude: c.lng }))}
+              strokeColor="#007BFF"
+              strokeWidth={4}
+            />
+            {/* Origin Marker (White Circle) */}
+            <Marker coordinate={{ latitude: routeCoordinates[0].lat, longitude: routeCoordinates[0].lng }} anchor={{ x: 0.5, y: 0.5 }}>
+              <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff', borderWidth: 4, borderColor: '#007BFF' }} />
+            </Marker>
+            {/* Destination Marker (Red Pin) */}
+            <Marker coordinate={{ latitude: routeCoordinates[routeCoordinates.length - 1].lat, longitude: routeCoordinates[routeCoordinates.length - 1].lng }} />
+          </>
         )}
         {Array.isArray(properties) && properties.map((property, index) => (
           <Polygon

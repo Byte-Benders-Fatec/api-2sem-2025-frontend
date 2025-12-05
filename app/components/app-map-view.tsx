@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Alert, StyleSheet, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Alert, StyleSheet, Text, TouchableOpacity, ActivityIndicator, TextInput, Keyboard, Platform, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Polygon, Region, Marker, Callout } from 'react-native-maps';
+import MapView, { Polygon, Region, Marker, Callout, Polyline } from 'react-native-maps';
+import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import * as api from '@/lib/api';
 import { fetchImoveisViewport, createImovelPlusCode } from '../lib/geoApi';
 import SearchPlaces from './SearchPlaces';
+import RouteInput from './RouteInput';
 
 interface Property {
   _id: string;
@@ -89,6 +92,12 @@ async function findPlaceByText(text: string, opts?: { region?: string; locationB
 }
 
 async function resolveTextToLatLng(text: string, opts?: { region?: string; locationBiasPoint?: { lat: number; lng: number } }): Promise<LatLng | null> {
+  // Check for "lat, lng" format
+  if (/^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(text.trim())) {
+    const [lat, lng] = text.split(',').map(Number);
+    return { lat, lng, description: text };
+  }
+
   if (isPlusCode(text)) {
     const byGeo = await geocodeByAddress(text, { region: opts?.region ?? 'br' });
     if (byGeo) return byGeo;
@@ -129,6 +138,129 @@ const AppMapView = ({
 
   const [selected, setSelected] = useState<{ lat: number; lng: number; description?: string } | null>(null);
 
+  // Routing State
+  const [routeMode, setRouteMode] = useState(false);
+  const [originText, setOriginText] = useState('');
+  const [destText, setDestText] = useState('');
+  const [routeCoordinates, setRouteCoordinates] = useState<LatLng[]>([]);
+  const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
+
+  const [isRouting, setIsRouting] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardOffset(e.endCoordinates.height);
+    });
+    const onHide = Keyboard.addListener(hideEvent, () => {
+      setKeyboardOffset(0);
+    });
+
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
+
+  // Helper to decode polyline
+  function decodePolyline(t: string) {
+    let points = [];
+    let index = 0, len = t.length;
+    let lat = 0, lng = 0;
+    while (index < len) {
+      let b, shift = 0, result = 0;
+      do {
+        b = t.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+      shift = 0;
+      result = 0;
+      do {
+        b = t.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+      points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+    }
+    return points;
+  }
+
+  const handleRoute = async () => {
+    if (!originText || !destText) {
+      Alert.alert('Campos vazios', 'Preencha origem e destino.');
+      return;
+    }
+    setIsRouting(true);
+    try {
+      let originCoords = null;
+      if (originText === 'Minha Localização') {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permissão negada', 'Precisamos da sua localização.');
+          setIsRouting(false);
+          return;
+        }
+        const loc = await Location.getCurrentPositionAsync({});
+        originCoords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+      } else {
+        originCoords = await resolveTextToLatLng(originText, { region: 'br' });
+      }
+
+      const destCoords = await resolveTextToLatLng(destText, { region: 'br' });
+
+      if (!originCoords || !destCoords) {
+        Alert.alert('Erro', 'Não foi possível encontrar um dos locais.');
+        setIsRouting(false);
+        return;
+      }
+
+      const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${originCoords.lat},${originCoords.lng}&destination=${destCoords.lat},${destCoords.lng}&key=${GOOGLE_KEY}`;
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (json.status === 'OK' && json.routes.length > 0) {
+        const route = json.routes[0];
+        const points = decodePolyline(route.overview_polyline.points);
+        setRouteCoordinates(points);
+
+        if (route.legs && route.legs.length > 0) {
+          setRouteInfo({
+            distance: route.legs[0].distance.text,
+            duration: route.legs[0].duration.text,
+          });
+        }
+
+        // Fit map to route
+        const allPoints = points.map(p => ({ latitude: p.lat, longitude: p.lng }));
+        mapRef.current?.fitToCoordinates(allPoints, {
+          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+          animated: true,
+        });
+      } else {
+        Alert.alert('Erro', 'Não foi possível traçar a rota.');
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Erro', 'Falha ao calcular rota.');
+    } finally {
+      setIsRouting(false);
+    }
+  };
+
+  const swapRoute = () => {
+    const temp = originText;
+    setOriginText(destText);
+    setDestText(temp);
+  };
+
   const regionToBbox = (r: Region) => {
     const minLat = r.latitude - r.latitudeDelta / 2;
     const maxLat = r.latitude + r.latitudeDelta / 2;
@@ -154,7 +286,7 @@ const AppMapView = ({
     }
   }, [isLoading]);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | number | null>(null);
   const handleRegionChangeComplete = useCallback((newRegion: Region) => {
     setRegion(newRegion);
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -244,6 +376,23 @@ const AppMapView = ({
         onLongPress={handleLongPress}
         mapType="standard"
       >
+        {routeCoordinates.length > 0 && (
+          <>
+            <Polyline
+              coordinates={routeCoordinates.map(c => ({ latitude: c.lat, longitude: c.lng }))}
+              strokeColor="#007BFF"
+              strokeWidth={4}
+            />
+            {/* Origin Marker (White Circle) */}
+            <Marker coordinate={{ latitude: routeCoordinates[0].lat, longitude: routeCoordinates[0].lng }} anchor={{ x: 0.5, y: 0.5 }}>
+              <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff', borderWidth: 4, borderColor: '#007BFF' }} />
+            </Marker>
+            {/* Destination Marker (Red Pin) */}
+            <Marker coordinate={{ latitude: routeCoordinates[routeCoordinates.length - 1].lat, longitude: routeCoordinates[routeCoordinates.length - 1].lng }} />
+
+
+          </>
+        )}
         {Array.isArray(properties) && properties.map((property, index) => (
           <Polygon
             key={property._id ?? `poly-${index}`}
@@ -258,18 +407,40 @@ const AppMapView = ({
         ))}
 
         {selected && (
-          <Marker coordinate={{ latitude: selected.lat, longitude: selected.lng }}>
-            <Callout>
-              <View style={{ maxWidth: 260 }}>
-                <Text style={{ fontWeight: '700', marginBottom: 4 }}>
-                  {selected.description ?? 'Local selecionado'}
-                </Text>
-                <Text>{selected.lat.toFixed(6)}, {selected.lng.toFixed(6)}</Text>
-              </View>
-            </Callout>
-          </Marker>
+          <Marker coordinate={{ latitude: selected.lat, longitude: selected.lng }} />
         )}
+
+
       </MapView>
+
+      {/* Painel de Local Selecionado (substitui o Callout) */}
+      {selected && !routeMode && !selectionMode && (
+        <View pointerEvents="box-none" style={styles.overlayTouchableArea}>
+          <View style={[styles.bottomPanel, { bottom: (insets?.bottom ?? 0) + 84 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.panelTitle}>{selected.description ?? 'Local selecionado'}</Text>
+                <Text style={styles.panelSubtitle}>{selected.lat.toFixed(6)}, {selected.lng.toFixed(6)}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelected(null)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.btnConfirm, { marginTop: 10, flexDirection: 'row', justifyContent: 'center', gap: 8 }]}
+              onPress={() => {
+                setRouteMode(true);
+                setDestText(selected.description || `${selected.lat}, ${selected.lng}`);
+                setOriginText('Minha Localização');
+              }}
+            >
+              <Ionicons name="navigate" size={20} color="#fff" />
+              <Text style={styles.btnConfirmText}>Traçar Rota</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Barra de busca */}
       <SearchPlaces
@@ -292,41 +463,130 @@ const AppMapView = ({
       />
 
       {/* Painel do Plus Code acima da tab bar */}
-      {selectionMode && (
-        <View pointerEvents="box-none" style={styles.overlayTouchableArea}>
-          <View style={[styles.bottomPanel, { bottom: (insets?.bottom ?? 0) + 84 }]}>
-            <Text style={styles.panelTitle}>Modo Plus Code</Text>
-            <Text style={styles.panelSubtitle}>
-              Toque e segure no mapa para escolher o ponto. Depois confirme.
-            </Text>
+      {
+        selectionMode && (
+          <View pointerEvents="box-none" style={styles.overlayTouchableArea}>
+            <View style={[styles.bottomPanel, { bottom: (insets?.bottom ?? 0) + 84 }]}>
+              <Text style={styles.panelTitle}>Modo Plus Code</Text>
+              <Text style={styles.panelSubtitle}>
+                Toque e segure no mapa para escolher o ponto. Depois confirme.
+              </Text>
 
-            <View style={styles.panelButtons}>
-              <TouchableOpacity
-                style={styles.btnCancel}
-                onPress={() => {
-                  router.setParams({ mode: '', propertyId: '' });
-                  router.replace('/(tabs)/propriedades');
-                }}
-                disabled={isSubmitting}
-              >
-                <Text style={styles.btnCancelText}>Cancelar</Text>
-              </TouchableOpacity>
+              <View style={styles.panelButtons}>
+                <TouchableOpacity
+                  style={styles.btnCancel}
+                  onPress={() => {
+                    router.setParams({ mode: '', propertyId: '' });
+                    router.replace('/(tabs)/propriedades');
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.btnCancelText}>Cancelar</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.btnConfirm, !selected && { opacity: 0.6 }]}
-                onPress={async () => {
-                  await handleConfirmSelection();
-                  router.setParams({ mode: '', propertyId: '' });
-                }}
-                disabled={!selected || isSubmitting}
-              >
-                <Text style={styles.btnConfirmText}>Confirmar local</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btnConfirm, !selected && { opacity: 0.6 }]}
+                  onPress={async () => {
+                    await handleConfirmSelection();
+                    router.setParams({ mode: '', propertyId: '' });
+                  }}
+                  disabled={!selected || isSubmitting}
+                >
+                  <Text style={styles.btnConfirmText}>Confirmar local</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      )}
-    </View>
+        )
+      }
+
+      {/* Painel de Rotas */}
+      {
+        routeMode && (
+          <View pointerEvents="box-none" style={styles.overlayTouchableArea}>
+            <View style={[styles.bottomPanel, { bottom: (insets?.bottom ?? 0) + 84 + (keyboardOffset > 0 ? keyboardOffset - 80 : 0), paddingHorizontal: 10 }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <Text style={styles.panelTitle}>Traçar Rota</Text>
+                <TouchableOpacity onPress={() => { setRouteMode(false); setRouteCoordinates([]); setRouteInfo(null); }}>
+                  <Ionicons name="close-circle" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ gap: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, zIndex: 20 }}>
+                  <Ionicons name="location" size={20} color="#28a745" />
+                  <RouteInput
+                    placeholder="Origem"
+                    value={originText}
+                    onChangeText={setOriginText}
+                    onPlaceSelected={(p) => setOriginText(p.description)}
+                  />
+                  <TouchableOpacity onPress={() => setOriginText('Minha Localização')}>
+                    <Ionicons name="locate" size={24} color="#007BFF" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <TouchableOpacity onPress={swapRoute}>
+                    <Ionicons name="swap-vertical" size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, zIndex: 10 }}>
+                  <Ionicons name="flag" size={20} color="#FF3B30" />
+                  <RouteInput
+                    placeholder="Destino"
+                    value={destText}
+                    onChangeText={setDestText}
+                    onPlaceSelected={(p) => setDestText(p.description)}
+                  />
+                  <TouchableOpacity onPress={() => setDestText('Minha Localização')}>
+                    <Ionicons name="locate" size={24} color="#007BFF" />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.btnConfirm, { marginTop: 10 }]}
+                  onPress={handleRoute}
+                  disabled={isRouting}
+                >
+                  {isRouting ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnConfirmText}>Calcular Rota</Text>}
+                </TouchableOpacity>
+
+                {routeInfo && (
+                  <View style={styles.modalInfoContainer}>
+                    <View style={styles.modalInfoItem}>
+                      <Ionicons name="time-outline" size={20} color="#333" />
+                      <Text style={styles.modalInfoText}>{routeInfo.duration}</Text>
+                    </View>
+                    <View style={styles.modalInfoDivider} />
+                    <View style={styles.modalInfoItem}>
+                      <Ionicons name="resize-outline" size={20} color="#333" />
+                      <Text style={styles.modalInfoText}>{routeInfo.distance}</Text>
+                    </View>
+                  </View>
+                )}
+
+                {routeCoordinates.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.btnConfirm, { backgroundColor: '#4285F4', marginTop: 8, flexDirection: 'row', justifyContent: 'center', gap: 8 }]}
+                    onPress={() => {
+                      const origin = originText === 'Minha Localização' ? '' : originText;
+                      const dest = destText;
+                      const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&travelmode=driving`;
+                      Linking.openURL(url);
+                    }}
+                  >
+                    <Ionicons name="map" size={20} color="#fff" />
+                    <Text style={styles.btnConfirmText}>Abrir no Maps</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        )
+      }
+    </View >
   );
 };
 
@@ -382,6 +642,64 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnConfirmText: { color: '#fff', fontWeight: '700' },
+  input: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 14,
+  },
+  routeInfoBubble: {
+    backgroundColor: '#fff',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    alignItems: 'center',
+    minWidth: 120,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  routeInfoText: {
+    fontWeight: '800',
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 2,
+  },
+  routeInfoSubText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  modalInfoContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  modalInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modalInfoText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  modalInfoDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#ccc',
+  },
 });
 
 export default AppMapView;

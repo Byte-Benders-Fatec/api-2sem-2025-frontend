@@ -44,3 +44,4 @@ app-example
 
 # variáveis de ambiente
 .env
+.env.docker
